@@ -1,0 +1,14 @@
+[package]
+name = "valinor-export-edges"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+bit-set = { workspace = true }
+clap = { version = "4.5.19", features = ["derive", "env"] }
+indicatif = { workspace = true }
+valhalla-graphtile = { path = "../valhalla-graphtile" }
+
+[lints]
+workspace = true
