@@ -86,6 +86,18 @@ impl GraphId {
         }
     }
 
+    /// Creates a graph ID from the given raw value without doing any validity checks.
+    ///
+    /// # Safety
+    ///
+    /// If you know that the value cannot possibly be larger than 46 bits,
+    /// this is safe.
+    /// Otherwise, you may risk things like invalid level indexes,
+    /// which could cause unexpected behavior elsewhere.
+    pub unsafe fn from_id_unchecked(id: u64) -> Self {
+        Self(id)
+    }
+
     /// Extracts the raw (packed) graph ID value.
     ///
     /// # Performance

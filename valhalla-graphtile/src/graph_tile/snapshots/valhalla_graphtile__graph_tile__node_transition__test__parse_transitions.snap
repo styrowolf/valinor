@@ -1,0 +1,8 @@
+---
+source: valhalla-graphtile/src/graph_tile/node_transition.rs
+expression: "tile.transitions[0]"
+---
+NodeTransition {
+    end_node_id: 1778766505,
+    up: 0,
+}

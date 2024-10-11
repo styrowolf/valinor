@@ -32,8 +32,12 @@ fn main() -> anyhow::Result<()> {
     let reader = DirectoryTileProvider::new(cli.tile_path);
 
     if !cli.no_progress {
-        _ = PROGRESS_STYLE.set(ProgressStyle::with_template("[{elapsed}] {bar:40.cyan/blue} {msg} {percent}% ETA {eta}")?
-            .progress_chars("##-"));
+        _ = PROGRESS_STYLE.set(
+            ProgressStyle::with_template(
+                "[{elapsed}] {bar:40.cyan/blue} {msg} {percent}% ETA {eta}",
+            )?
+            .progress_chars("##-"),
+        );
     }
 
     // TODO: Almost all code below feels like it can be abstracted into a graph traversal helper...
@@ -48,7 +52,10 @@ fn main() -> anyhow::Result<()> {
 
         let progress_bar = PROGRESS_STYLE.get().map(|style| {
             let bar = ProgressBar::new(u64::from(n_tiles));
-            bar.set_message(format!("Scanning {n_tiles} tiles in level {}...", level.level));
+            bar.set_message(format!(
+                "Scanning {n_tiles} tiles in level {}...",
+                level.level
+            ));
             bar.set_style(style.clone());
             bar
         });

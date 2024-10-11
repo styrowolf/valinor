@@ -1,13 +1,14 @@
-use super::GraphTileError;
 use crate::BIN_COUNT;
 use bitfield_struct::bitfield;
 use geo::{coord, Coord};
 use std::borrow::Cow;
+use zerocopy_derive::FromBytes;
 
 /// Remaining variable offset slots for growth.
 /// See valhalla/balder/graphtileheader.h for details.
 const EMPTY_SLOTS: usize = 11;
 
+#[derive(FromBytes)]
 #[bitfield(u64)]
 struct FirstBitfield {
     #[bits(46)]
@@ -20,10 +21,17 @@ struct FirstBitfield {
     speed_quality: u8,
     #[bits(4)]
     exit_quality: u8,
-    has_elevation: bool,
-    has_ext_directed_edge: bool,
+    // NOTE: We don't use bool, because that doesn't have a `FromBytes` implementation.
+    // We are only using a single bit though, so we *can* guarantee that the bit pattern is valid.
+    // This will probably change once we have the ability to assume bit validity.
+    // This is currently in beta: https://doc.rust-lang.org/beta/std/mem/trait.TransmuteFrom.html.
+    #[bits(1)]
+    has_elevation: u8,
+    #[bits(1)]
+    has_ext_directed_edge: u8,
 }
 
+#[derive(FromBytes)]
 #[bitfield(u64)]
 struct SecondBitfield {
     #[bits(21)]
@@ -40,6 +48,7 @@ struct SecondBitfield {
 // between x86 and amd64 architectures.
 // This was entirely accidental upstream and will eventually be cleaned up in v4.
 
+#[derive(FromBytes)]
 #[bitfield(u32)]
 struct TransitionCountBitfield {
     #[bits(22)]
@@ -49,6 +58,7 @@ struct TransitionCountBitfield {
     _spare: u16,
 }
 
+#[derive(FromBytes)]
 #[bitfield(u32)]
 struct TurnLaneCountBitfield {
     #[bits(21)]
@@ -57,6 +67,7 @@ struct TurnLaneCountBitfield {
     _spare: u16,
 }
 
+#[derive(FromBytes)]
 #[bitfield(u64)]
 struct TransitRecordBitfield {
     #[bits(16)]
@@ -71,6 +82,7 @@ struct TransitRecordBitfield {
     _spare: u8,
 }
 
+#[derive(FromBytes)]
 #[bitfield(u64)]
 struct MiscCountsBitFieldOne {
     #[bits(12)]
@@ -83,6 +95,7 @@ struct MiscCountsBitFieldOne {
     _spare: u16,
 }
 
+#[derive(FromBytes)]
 #[bitfield(u64)]
 struct MiscCountsBitFieldTwo {
     #[bits(24)]
@@ -95,8 +108,13 @@ struct MiscCountsBitFieldTwo {
 
 // TODO: Unsure if packed is needed as well.
 // Seems like it's technically not, since Valhalla is explicit about padding
+/// Summary information about the graph tile.
+///
+/// This contains metadata like version,
+/// number of nodes and edges,
+/// and pointer offsets to other data.
+#[derive(FromBytes, Debug)]
 #[repr(C)]
-#[derive(Clone, Copy)]
 pub struct GraphTileHeader {
     bit_field_1: FirstBitfield,
     base_lon_lat: [f32; 2],
@@ -113,13 +131,11 @@ pub struct GraphTileHeader {
     /// As long as the size of the header and order of the date of the structure doesn't change,
     /// this should be backward compatible.
     pub reserved: u128,
-    /// Offset to the beginning of the variable sized data.
+    // TODO: Valhalla has the unhelpful comment "Offset to the beginning of the variable sized data."
+    // We should improve these.
     pub complex_restriction_forward_offset: u32,
-    /// Offset to the beginning of the variable sized data.
     pub complex_restriction_reverse_offset: u32,
-    /// Offset to the beginning of the variable sized data.
     pub edge_info_offset: u32,
-    /// Offset to the beginning of the variable sized data.
     pub text_list_offset: u32,
     /// The date the tile was created (since pivot date).
     /// TODO: Figure out what pivot date means; probably hide the raw value
@@ -137,37 +153,6 @@ pub struct GraphTileHeader {
 }
 
 impl GraphTileHeader {
-    /// Constructs a graph tile by interpreting raw bytes.
-    ///
-    /// # Safety
-    ///
-    /// The caller is expected to understand what they are doing.
-    /// This function does the equivalent of a C++ `reinterpret_cast`,
-    /// so it is the responsibility of the caller to ensure they are not feeding bad data.
-    ///
-    /// # Errors
-    ///
-    /// If the number of bytes passed is not equal to the struct size in memory,
-    /// returns [`GraphTileError::InvalidHeaderSize`].
-    /// Callers should ensure the input is valid by invoking [`size_of`] on this type.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, GraphTileError> {
-        // Ensure the byte slice is of the correct size.
-        if bytes.len() != size_of::<Self>() {
-            return Err(GraphTileError::InvalidHeaderSize);
-        }
-
-        // let n = 5u32 + 7;
-
-        // Safety: We're reading bytes into a C struct.
-        // The way it's laid out in the structs in the original code is pretty meticulous,
-        // so the pedantic alignment warning should be ignorable.
-        #[allow(clippy::cast_ptr_alignment)]
-        unsafe {
-            // TODO: Should we be using std::mem::transmute instead?
-            Ok(*(bytes.as_ptr().cast::<GraphTileHeader>()))
-        }
-    }
-
     /// The full Graph ID of this tile.
     #[inline]
     pub const fn graph_id(&self) -> u64 {
@@ -201,13 +186,13 @@ impl GraphTileHeader {
     /// Does this tile include elevation data?
     #[inline]
     pub const fn has_elevation(&self) -> bool {
-        self.bit_field_1.has_elevation()
+        self.bit_field_1.has_elevation() != 0
     }
 
     /// Does this tile include extended directed edge attributes?
     #[inline]
     pub const fn has_ext_directed_edge(&self) -> bool {
-        self.bit_field_1.has_ext_directed_edge()
+        self.bit_field_1.has_ext_directed_edge() != 0
     }
 
     /// The coordinate of the southwest corner of this graph tile.
@@ -297,5 +282,45 @@ impl GraphTileHeader {
     #[inline]
     pub fn admin_count(&self) -> u16 {
         self.misc_counts_bit_field_two.admin_count()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::BIN_COUNT;
+    use geo::coord;
+    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+
+    #[test]
+    fn test_parse_header() {
+        let tile = &*TEST_GRAPH_TILE;
+        let header = &tile.header;
+
+        assert_eq!(header.graph_id(), TEST_GRAPH_TILE_ID.value());
+        assert_eq!(header.density(), 0);
+        assert_eq!(header.name_quality(), 0);
+        assert_eq!(header.speed_quality(), 0);
+        assert_eq!(header.exit_quality(), 0);
+        assert_eq!(header.has_elevation(), false);
+        assert_eq!(header.has_ext_directed_edge(), false);
+        assert_eq!(header.sw_corner(), coord! {x: 0.0, y: 42.0 });
+        assert_eq!(header.version(), "3.5.0");
+        assert_eq!(header.dataset_id, 12218323114);
+        assert_eq!(header.node_count(), 1343);
+        assert_eq!(header.directed_edge_count(), 3426);
+        assert_eq!(header.predicted_speeds_count(), 0);
+        assert_eq!(header.transition_count(), 712);
+        assert_eq!(header.turn_lane_count(), 6);
+        // TODO: Build and test some transit tiles
+        assert_eq!(header.transfer_count(), 0);
+        assert_eq!(header.departure_count(), 0);
+        assert_eq!(header.stop_count(), 0);
+        assert_eq!(header.route_count(), 0);
+        assert_eq!(header.schedule_count(), 0);
+        assert_eq!(header.sign_count(), 0);
+        assert_eq!(header.access_restriction_count(), 8);
+        assert_eq!(header.admin_count(), 4);
+
+        insta::assert_debug_snapshot!(tile.header);
     }
 }
