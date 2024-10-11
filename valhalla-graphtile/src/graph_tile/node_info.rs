@@ -1,8 +1,8 @@
+use crate::Access;
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
 use geo::{coord, Coord};
-use zerocopy_derive::{FromBytes};
-use crate::Access;
+use zerocopy_derive::FromBytes;
 
 const NODE_ELEVATION_PRECISION: f32 = 0.25;
 const MIN_ELEVATION: f32 = -500.0;
@@ -117,8 +117,10 @@ impl NodeInfo {
         // on storage of vast numbers of coordinates.
         // We also know the sw_corner resolution doesn't require f64.
         // But we still do all the internal math in f64 for better precision.
-        let lat_offset = (self.first_bit_field.lat_offset() as f64) * 1e-6f64 + (self.first_bit_field.lat_offset7() as f64) * 1e-7f64;
-        let lon_offset = (self.first_bit_field.lon_offset() as f64) * 1e-6f64 + (self.first_bit_field.lon_offset7() as f64) * 1e-7f64;
+        let lat_offset = (self.first_bit_field.lat_offset() as f64) * 1e-6f64
+            + (self.first_bit_field.lat_offset7() as f64) * 1e-7f64;
+        let lon_offset = (self.first_bit_field.lon_offset() as f64) * 1e-6f64
+            + (self.first_bit_field.lon_offset7() as f64) * 1e-7f64;
         sw_corner + coord! {x: lon_offset as f32, y: lat_offset as f32}
     }
 
@@ -276,16 +278,18 @@ impl NodeInfo {
             None
         } else {
             let shift = u64::from(local_edge_index) * 8;
-            Some((((self.headings & (255u64 << shift)) >> shift) as f32 * HEADING_EXPAND_FACTOR).round() as u16)
+            Some(
+                (((self.headings & (255u64 << shift)) >> shift) as f32 * HEADING_EXPAND_FACTOR)
+                    .round() as u16,
+            )
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::graph_tile::TEST_GRAPH_TILE;
     use enumset::EnumSet;
-    use geo::coord;
-    use crate::graph_tile::{TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_nodes_count() {

@@ -1,5 +1,5 @@
 use thiserror::Error;
-use zerocopy::{transmute, FromBytes};
+use zerocopy::{transmute, try_transmute};
 
 #[cfg(test)]
 use std::sync::LazyLock;
@@ -14,10 +14,12 @@ use zerocopy::IntoBytes;
 // and test the first and last elements of variable length vectors
 // with snapshot tests.
 
+mod directed_edge;
 mod header;
 mod node_info;
 mod node_transition;
 
+pub use directed_edge::DirectedEdge;
 pub use header::GraphTileHeader;
 pub use node_info::NodeInfo;
 pub use node_transition::NodeTransition;
@@ -26,22 +28,41 @@ pub use node_transition::NodeTransition;
 /// This can't be written as a function because the const generics
 /// require explicit types and that context isn't available from function generic params.
 macro_rules! transmute_variable_length_data {
-    ($type:ty, $data:expr, $item_count:expr) => {
-        {
-            const PTR_SIZE: usize = size_of::<$type>();
-            (0..$item_count).map(|i| {
+    ($type:ty, $data:expr, $item_count:expr) => {{
+        const PTR_SIZE: usize = size_of::<$type>();
+        (0..$item_count)
+            .map(|i| {
                 let range = PTR_SIZE * i..PTR_SIZE * (i + 1);
                 let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
                 Ok(transmute!(slice))
-            }).collect::<Result<_, GraphTileError>>()
-        }
-    };
+            })
+            .collect::<Result<_, GraphTileError>>()
+    }};
+}
+
+/// Tries to transmute variable length data into a Vec<T>.
+/// Analoguous to [`transmute_variable_length_data`],
+/// but for types implementing [`zerocopy::TryFromBytes`]
+/// rather than [`zerocopy::FromBytes`].
+macro_rules! try_transmute_variable_length_data {
+    ($type:ty, $data:expr, $item_count:expr) => {{
+        const PTR_SIZE: usize = size_of::<$type>();
+        (0..$item_count)
+            .map(|i| {
+                let range = PTR_SIZE * i..PTR_SIZE * (i + 1);
+                let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
+                try_transmute!(slice).map_err(|_| GraphTileError::ValidityError)
+            })
+            .collect::<Result<_, GraphTileError>>()
+    }};
 }
 
 #[derive(Debug, Error)]
 pub enum GraphTileError {
     #[error("Unable to extract a slice of the correct length; the tile data is malformed.")]
     SliceArrayConversion(#[from] std::array::TryFromSliceError),
+    #[error("The byte sequence is not valid for this type.")]
+    ValidityError,
 }
 
 /// A tile within the Valhalla hierarchical tile graph.
@@ -52,7 +73,7 @@ pub struct GraphTile {
     pub nodes: Vec<NodeInfo>,
     /// The list of transitions between nodes on different levels.
     pub transitions: Vec<NodeTransition>,
-    // TODO: Directed edges
+    pub directed_edges: Vec<DirectedEdge>,
     // TODO: Extended directed edges
     // TODO: Access restrictions (conditional?)
     // TODO: Transit departures
@@ -83,34 +104,42 @@ impl TryFrom<&[u8]> for GraphTile {
         let header_range = 0..size_of::<GraphTileHeader>();
 
         // Save the pointer to the list of nodes (the range is consumed)
-        let node_info_start = header_range.end;
+        let nodes_offset = header_range.end;
 
         // Parse the header
         let header_slice: [u8; size_of::<GraphTileHeader>()] = value[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
+        // TODO: Clean this up with a macro or something...
+
         // Parse the list of nodes
         let node_count = header.node_count() as usize;
-        let nodes = transmute_variable_length_data!(NodeInfo, &value[node_info_start..], node_count)?;
+        let nodes = transmute_variable_length_data!(NodeInfo, &value[nodes_offset..], node_count)?;
 
         // Parse the list of transitions
-        let transition_info_start = node_info_start + (size_of::<NodeInfo>() * node_count);
+        let transitions_offset = nodes_offset + (size_of::<NodeInfo>() * node_count);
         let transition_count = header.transition_count() as usize;
-        let transitions = transmute_variable_length_data!(NodeTransition, &value[transition_info_start..], transition_count)?;
-        // let transition_count = header.transition_count() as usize;
-        // const TRANSITION_PTR_SIZE: usize = size_of::<NodeTransition>();
-        // let nodes = (0..node_count).map(|i| {
-        //     let range = (node_info_start + (NODE_PTR_SIZE * i))..node_info_start + (NODE_PTR_SIZE * (i + 1));
-        //     let slice: [u8; size_of::<NodeInfo>()] = value[range].try_into()?;
-        //     Ok(transmute!(slice))
-        // }).collect::<Result<_, GraphTileError>>()?;
+        let transitions = transmute_variable_length_data!(
+            NodeTransition,
+            &value[transitions_offset..],
+            transition_count
+        )?;
 
-        // TODO: Parse the list of directed edges
+        // Parse the list of directed edges
+        let directed_edges_offset =
+            transitions_offset + (size_of::<NodeTransition>() * transition_count);
+        let directed_edge_count = header.directed_edge_count() as usize;
+        let directed_edges = try_transmute_variable_length_data!(
+            DirectedEdge,
+            &value[directed_edges_offset..],
+            directed_edge_count
+        )?;
 
         Ok(Self {
             header,
             nodes,
             transitions,
+            directed_edges,
         })
     }
 }
@@ -123,7 +152,9 @@ static TEST_GRAPH_TILE_ID: LazyLock<crate::GraphId> = LazyLock::new(|| {
 #[cfg(test)]
 static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
     let graph_id = &*TEST_GRAPH_TILE_ID;
-    let relative_path = graph_id.file_path("gph").expect("Unable to get relative path");
+    let relative_path = graph_id
+        .file_path("gph")
+        .expect("Unable to get relative path");
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("fixtures")
         .join("andorra-tiles")

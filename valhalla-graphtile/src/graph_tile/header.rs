@@ -287,9 +287,8 @@ impl GraphTileHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::BIN_COUNT;
-    use geo::coord;
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+    use geo::coord;
 
     #[test]
     fn test_parse_header() {

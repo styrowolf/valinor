@@ -1,6 +1,6 @@
+use crate::GraphId;
 use bitfield_struct::bitfield;
 use zerocopy_derive::FromBytes;
-use crate::GraphId;
 
 #[derive(FromBytes)]
 #[bitfield(u64)]
@@ -33,13 +33,16 @@ impl NodeTransition {
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::{TEST_GRAPH_TILE};
+    use crate::graph_tile::TEST_GRAPH_TILE;
 
     #[test]
     fn test_parse_transitions_count() {
         let tile = &*TEST_GRAPH_TILE;
 
-        assert_eq!(tile.transitions.len(), tile.header.transition_count() as usize);
+        assert_eq!(
+            tile.transitions.len(),
+            tile.header.transition_count() as usize
+        );
     }
 
     #[test]

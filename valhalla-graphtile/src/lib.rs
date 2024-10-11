@@ -11,6 +11,7 @@ pub mod tile_hierarchy;
 pub mod tile_provider;
 
 use enumset::EnumSetType;
+use zerocopy_derive::TryFromBytes;
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,
 // But many of those only have one or two useful definitions to re-export,
@@ -18,6 +19,12 @@ use enumset::EnumSetType;
 pub use graph_id::GraphId;
 pub use graph_reader::GraphReader;
 
+/// Road class; broad hierarchies of relative (and sometimes locally specific) importance.
+///
+/// These are used in a variety of situations:
+/// - For inferring access in the absence of explicit tags
+/// - For estimating speeds when better data is not available
+/// - To determine preference / avoidance for roads
 #[repr(u8)]
 pub enum RoadClass {
     Motorway,
@@ -30,10 +37,93 @@ pub enum RoadClass {
     ServiceOther,
 }
 
+/// Sub-categorization of roads based on specialized usage.
+///
+/// NOTE: This is packed in a 6-bit field; the maximum usable value is 63!
+#[derive(TryFromBytes, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum RoadUse {
+    // General road-oriented tags
+    /// Standard road (the default).
+    Road = 0,
+    /// Entrance or exit ramp.
+    Ramp = 1,
+    /// Turn lane
+    TurnChannel = 2,
+    /// Agricultural use, forest tracks, and some unspecified rough roads.
+    Track = 3,
+    /// Driveway or private service road.
+    Driveway = 4,
+    /// Service road with limited routing use.
+    Alley = 5,
+    /// Access roads in parking areas.
+    ParkingAisle = 6,
+    /// Emergency vehicles only.
+    EmergencyAccess = 7,
+    /// Commercial drive-thru (banks/fast-food are common examples).
+    DriveThru = 8,
+    /// A Cul-de-sac (edge that forms a loop and is only connected at one node to another edge;
+    /// common in some subdivisions).
+    CulDeSac = 9,
+    /// Streets with preference towards bicyclists and pedestrians.
+    LivingStreet = 10,
+    /// A generic service road (not specifically a driveway, alley, parking aisle, etc.).
+    ServiceRoad = 11,
+
+    // Bicycle-specific uses
+    /// A dedicated bicycle path.
+    Cycleway = 20,
+    /// A mountain bike trail.
+    MountainBike = 21,
+
+    /// A sidewalk along another road (usually designated for pedestrian use; cycle policies vary)
+    Sidewalk = 24,
+
+    // Pedestrian-specific uses
+    /// A type of road with pedestrian priority; bicycles may be granted access in some cases.
+    Footway = 25,
+    /// A stairway/steps.
+    Steps = 26,
+    Path = 27,
+    Pedestrian = 28,
+    Bridleway = 29,
+    /// A crosswalk or other designated crossing.
+    PedestrianCrossing = 32,
+    Elevator = 33,
+    Escalator = 34,
+    Platform = 35,
+
+    // Rest/Service Areas
+    RestArea = 30,
+    ServiceArea = 31,
+
+    /// Other... currently, either BSS Connection or unspecified service road
+    Other = 40,
+
+    // Ferry and rail ferry
+    Ferry = 41,
+    RailFerry = 42,
+
+    /// Roads currently under construction
+    Construction = 43,
+
+    // Transit specific uses. Must be last in the list
+    /// A rail line (subway, metro, train).
+    Rail = 50,
+    /// A bus line.
+    Bus = 51,
+    /// Connection egress <-> station
+    EgressConnection = 52,
+    /// Connection station <-> platform
+    PlatformConnection = 53,
+    /// Connection osm <-> egress
+    TransitConnection = 54,
+}
+
 /// Access permission by travel type.
 ///
 /// This is stored internally as a bit field.
-/// NB: While it is a 16-bit integer, the way it is stored in directed edges
+/// NOTE: While it is a 16-bit integer, the way it is stored in directed edges
 /// only allows for TWELVE bits to be used!
 #[derive(Debug, EnumSetType)]
 #[enumset(repr = "u16")]
@@ -50,7 +140,7 @@ pub enum Access {
     Moped,
     Motorcycle,
     GolfCart,
-    // NB: Only 12 bits are allowed to be used!
+    // NOTE: Only 12 bits are allowed to be used!
     // All = 4095,
 }
 
@@ -59,8 +149,8 @@ const BIN_COUNT: u8 = 25;
 
 #[cfg(test)]
 mod tests {
-    use enumset::EnumSet;
     use crate::Access;
+    use enumset::EnumSet;
 
     #[test]
     fn test_access_representation() {
