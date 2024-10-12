@@ -13,8 +13,8 @@ geo = "0.28.0"
 indicatif = "0.17.8"
 insta = { version = "1.40.0", features = ["yaml"] }
 thiserror = "1.0.64"
-zerocopy = "0.8.3"
-zerocopy-derive = "0.8.3"
+zerocopy = "0.8.5"
+zerocopy-derive = "0.8.5"
 
 [profile.dev.package]
 insta.opt-level = 3

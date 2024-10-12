@@ -49,6 +49,7 @@ mod test {
         let tile = provider.get_tile(&graph_id).expect("Unable to get tile");
 
         // Minimally test that we got the correct tile
-        assert_eq!(tile.header.graph_id(), graph_id.value());
+        assert_eq!(tile.header.graph_id(), graph_id);
+        assert_eq!(tile.header.graph_id().value(), graph_id.value());
     }
 }

@@ -19,7 +19,9 @@ mod header;
 mod node_info;
 mod node_transition;
 
+use crate::GraphId;
 pub use directed_edge::DirectedEdge;
+pub use directed_edge::DirectedEdgeExt;
 pub use header::GraphTileHeader;
 pub use node_info::NodeInfo;
 pub use node_transition::NodeTransition;
@@ -65,16 +67,25 @@ pub enum GraphTileError {
     ValidityError,
 }
 
+#[derive(Debug, Error)]
+pub enum LookupError {
+    #[error("Mismatched base; the graph ID cannot exist in this tile.")]
+    MismatchedBase,
+    #[error("The feature at the index specified does not exist in this tile.")]
+    InvalidIndex,
+}
+
 /// A tile within the Valhalla hierarchical tile graph.
 pub struct GraphTile {
     /// Header with various metadata about the tile and internal sizes.
     pub header: GraphTileHeader,
     /// The list of nodes in the graph tile.
-    pub nodes: Vec<NodeInfo>,
+    nodes: Vec<NodeInfo>,
     /// The list of transitions between nodes on different levels.
-    pub transitions: Vec<NodeTransition>,
-    pub directed_edges: Vec<DirectedEdge>,
+    transitions: Vec<NodeTransition>,
+    directed_edges: Vec<DirectedEdge>,
     // TODO: Extended directed edges
+    ext_directed_edges: Vec<DirectedEdgeExt>,
     // TODO: Access restrictions (conditional?)
     // TODO: Transit departures
     // TODO: Transit stops
@@ -96,6 +107,71 @@ pub struct GraphTile {
     // TODO: Operator one stops(?)
 }
 
+impl GraphTile {
+    /// Gets the Graph ID of the tile.
+    #[inline]
+    pub fn graph_id(&self) -> GraphId {
+        self.header.graph_id()
+    }
+
+    /// Does the supplied graph ID belong in this tile?
+    ///
+    /// A true result does not necessarily guarantee that an object with this ID exists,
+    /// but in that case, either you've cooked up an invalid ID for fun,
+    /// or the graph is invalid.
+    pub fn may_contain_id(&self, id: &GraphId) -> bool {
+        id.tile_base_id() == self.graph_id().tile_base_id()
+    }
+
+    /// Gets a reference to a node in this tile with the given graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    pub fn get_node(&self, id: &GraphId) -> Result<&NodeInfo, LookupError> {
+        if self.may_contain_id(id) {
+            self.nodes
+                .get(id.tile_index() as usize)
+                .ok_or(LookupError::InvalidIndex)
+        } else {
+            Err(LookupError::MismatchedBase)
+        }
+    }
+
+    /// Gets a reference to the directed edge in this tile by graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    pub fn get_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdge, LookupError> {
+        if self.may_contain_id(id) {
+            self.directed_edges
+                .get(id.tile_index() as usize)
+                .ok_or(LookupError::InvalidIndex)
+        } else {
+            Err(LookupError::MismatchedBase)
+        }
+    }
+
+    /// Gets a reference to an extended directed edge in this tile by graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    pub fn get_ext_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdgeExt, LookupError> {
+        if self.may_contain_id(id) {
+            self.ext_directed_edges
+                .get(id.tile_index() as usize)
+                .ok_or(LookupError::InvalidIndex)
+        } else {
+            Err(LookupError::MismatchedBase)
+        }
+    }
+}
+
 impl TryFrom<&[u8]> for GraphTile {
     type Error = GraphTileError;
 
@@ -110,7 +186,7 @@ impl TryFrom<&[u8]> for GraphTile {
         let header_slice: [u8; size_of::<GraphTileHeader>()] = value[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
-        // TODO: Clean this up with a macro or something...
+        // TODO: Clean this repetitive mess up with a macro or something...
 
         // Parse the list of nodes
         let node_count = header.node_count() as usize;
@@ -135,19 +211,33 @@ impl TryFrom<&[u8]> for GraphTile {
             directed_edge_count
         )?;
 
+        // Parse the list of extended directed edges
+        let directed_edges_ext_offset =
+            transitions_offset + (size_of::<DirectedEdge>() * directed_edge_count);
+        let directed_edge_ext_count = if header.has_ext_directed_edge() {
+            header.directed_edge_count() as usize
+        } else {
+            0
+        };
+        let ext_directed_edges = transmute_variable_length_data!(
+            DirectedEdgeExt,
+            &value[directed_edges_ext_offset..],
+            directed_edge_ext_count
+        )?;
+
         Ok(Self {
             header,
             nodes,
             transitions,
             directed_edges,
+            ext_directed_edges,
         })
     }
 }
 
 #[cfg(test)]
-static TEST_GRAPH_TILE_ID: LazyLock<crate::GraphId> = LazyLock::new(|| {
-    crate::GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID")
-});
+static TEST_GRAPH_TILE_ID: LazyLock<GraphId> =
+    LazyLock::new(|| GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID"));
 
 #[cfg(test)]
 static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {

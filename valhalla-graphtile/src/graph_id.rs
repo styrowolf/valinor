@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use crate::tile_hierarchy::{STANDARD_LEVELS, TRANSIT_LEVEL};
 use std::path::PathBuf;
 use thiserror::Error;
@@ -22,14 +23,14 @@ const MAX_GRAPH_ID: u64 = (1 << 46) - 1;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InvalidGraphIdError {
-    #[error("Level {0} is larger than the maximum allowed value.")]
-    Level(u8),
-    #[error("Tile ID {0} is larger than the maximum allowed value.")]
-    GraphTileId(u64),
-    #[error("Tile index {0} is larger than the maximum allowed value.")]
-    TileIndex(u64),
-    #[error("Graph ID {0} is invalid")]
-    GraphId(u64),
+    #[error("Level is larger than the maximum allowed value.")]
+    Level,
+    #[error("Tile ID is larger than the maximum allowed value.")]
+    GraphTileId,
+    #[error("Tile index is larger than the maximum allowed value.")]
+    TileIndex,
+    #[error("Graph ID is invalid")]
+    GraphId,
 }
 
 /// An Identifier of a node or an edge within the tiled, hierarchical graph.
@@ -61,11 +62,11 @@ impl GraphId {
         index: u64,
     ) -> Result<Self, InvalidGraphIdError> {
         if level > MAX_HIERARCHY_LEVEL {
-            Err(InvalidGraphIdError::Level(level))
+            Err(InvalidGraphIdError::Level)
         } else if tile_id > MAX_GRAPH_TILE_ID {
-            Err(InvalidGraphIdError::GraphTileId(tile_id))
+            Err(InvalidGraphIdError::GraphTileId)
         } else if index > MAX_TILE_INDEX {
-            Err(InvalidGraphIdError::TileIndex(index))
+            Err(InvalidGraphIdError::TileIndex)
         } else {
             Ok(Self(u64::from(level) | (tile_id << 3) | index << 25))
         }
@@ -80,7 +81,7 @@ impl GraphId {
     pub fn try_from_id(id: u64) -> Result<Self, InvalidGraphIdError> {
         // Simple check since we know the max bit width
         if id > MAX_GRAPH_ID {
-            Err(InvalidGraphIdError::GraphId(id))
+            Err(InvalidGraphIdError::GraphId)
         } else {
             Ok(GraphId(id))
         }
@@ -99,22 +100,12 @@ impl GraphId {
     }
 
     /// Extracts the raw (packed) graph ID value.
-    ///
-    /// # Performance
-    ///
-    /// This function is inlined struct field access.
-    /// The struct itself is a newtype, so the structure is optimized away.
     #[inline]
     pub const fn value(&self) -> u64 {
         self.0
     }
 
     /// Gets the hierarchy level.
-    ///
-    /// # Performance
-    ///
-    /// This function extracts the value using bitwise operations on the underlying value.
-    /// All operations are inlined, so there is minimal overhead.
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     pub const fn level(&self) -> u8 {
@@ -122,22 +113,12 @@ impl GraphId {
     }
 
     /// Gets the graph tile ID.
-    ///
-    /// # Performance
-    ///
-    /// This function extracts the value using bitwise operations on the underlying value.
-    /// All operations are inlined, so there is minimal overhead.
     #[inline]
     pub const fn tile_id(&self) -> u64 {
         (self.value() & 0x01ff_fff8) >> 3
     }
 
     /// Gets the unique identifier (index) within the hierarchy level.
-    ///
-    /// # Performance
-    ///
-    /// This function extracts the value using bitwise operations on the underlying value.
-    /// All operations are inlined, so there is minimal overhead.
     #[inline]
     pub const fn tile_index(&self) -> u64 {
         (self.value() & 0x3fff_fe00_0000) >> 25
@@ -169,7 +150,7 @@ impl GraphId {
         let max_id = level.tiling_system.n_cols * level.tiling_system.n_rows - 1;
         let tile_id = self.tile_id();
         if tile_id > u64::from(max_id) {
-            return Err(InvalidGraphIdError::GraphTileId(tile_id));
+            return Err(InvalidGraphIdError::GraphTileId);
         }
 
         let l = max_id.max(1).ilog10() + 1;
@@ -194,6 +175,12 @@ impl GraphId {
     }
 }
 
+impl Display for GraphId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("GraphId {}/{}/{}", self.level(), self.tile_id(), self.tile_index()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,7 +189,7 @@ mod tests {
     fn test_invalid_level() {
         assert_eq!(
             GraphId::try_from_components(MAX_HIERARCHY_LEVEL + 1, 0, 0),
-            Err(InvalidGraphIdError::Level(MAX_HIERARCHY_LEVEL + 1))
+            Err(InvalidGraphIdError::Level)
         );
     }
 
@@ -210,7 +197,7 @@ mod tests {
     fn test_invalid_tile_id() {
         assert_eq!(
             GraphId::try_from_components(0, MAX_GRAPH_TILE_ID + 1, 0),
-            Err(InvalidGraphIdError::GraphTileId(MAX_GRAPH_TILE_ID + 1))
+            Err(InvalidGraphIdError::GraphTileId)
         );
     }
 
@@ -218,7 +205,7 @@ mod tests {
     fn test_invalid_tile_index() {
         assert_eq!(
             GraphId::try_from_components(0, 0, MAX_TILE_INDEX + 1),
-            Err(InvalidGraphIdError::TileIndex(MAX_TILE_INDEX + 1))
+            Err(InvalidGraphIdError::TileIndex)
         );
     }
 
@@ -273,7 +260,7 @@ mod tests {
         assert_eq!(
             GraphId::try_from_id(MAX_GRAPH_ID + 1),
             // Note: only 46 bits actually used
-            Err(InvalidGraphIdError::GraphId(MAX_GRAPH_ID + 1))
+            Err(InvalidGraphIdError::GraphId)
         );
     }
 

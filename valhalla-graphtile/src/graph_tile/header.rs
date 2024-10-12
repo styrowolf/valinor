@@ -1,4 +1,4 @@
-use crate::BIN_COUNT;
+use crate::{GraphId, BIN_COUNT};
 use bitfield_struct::bitfield;
 use geo::{coord, Coord};
 use std::borrow::Cow;
@@ -155,8 +155,10 @@ pub struct GraphTileHeader {
 impl GraphTileHeader {
     /// The full Graph ID of this tile.
     #[inline]
-    pub const fn graph_id(&self) -> u64 {
-        self.bit_field_1.graph_id()
+    pub fn graph_id(&self) -> GraphId {
+        // Safety: We know that the bit field cannot contain a value
+        // larger than the max allowed value.
+        unsafe { GraphId::from_id_unchecked(self.bit_field_1.graph_id()) }
     }
 
     /// The relative road density within this tile (0-15).
@@ -295,7 +297,7 @@ mod test {
         let tile = &*TEST_GRAPH_TILE;
         let header = &tile.header;
 
-        assert_eq!(header.graph_id(), TEST_GRAPH_TILE_ID.value());
+        assert_eq!(header.graph_id(), *TEST_GRAPH_TILE_ID);
         assert_eq!(header.density(), 0);
         assert_eq!(header.name_quality(), 0);
         assert_eq!(header.speed_quality(), 0);

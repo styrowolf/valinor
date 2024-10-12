@@ -1,5 +1,5 @@
 use crate::graph_tile::GraphTileError;
-use crate::RoadUse;
+use crate::{GraphId, RoadUse};
 use bitfield_struct::bitfield;
 use std::fmt::{Debug, Formatter};
 use zerocopy::try_transmute;
@@ -217,8 +217,8 @@ impl Debug for StopOrLine {
 /// Additional details can be found in the [`EdgeInfo`] struct,
 /// which contains things like the encoded shape, OSM way ID,
 /// and other info that is not necessary for making routing decisions.
-#[repr(C)]
 #[derive(TryFromBytes, Debug)]
+#[repr(C)]
 pub struct DirectedEdge {
     first_bitfield: FirstBitfield,
     second_bitfield: SecondBitfield,
@@ -232,20 +232,63 @@ pub struct DirectedEdge {
 impl DirectedEdge {
     // TODO: Dozens of access helpers :)
 
-    /// The way the edge is used.
+    /// Is this a transit line (buss or rail)?
     #[inline]
-    pub fn edge_use(&self) -> Result<RoadUse, GraphTileError> {
-        try_transmute!(self.third_bitfield.edge_use()).map_err(|_| GraphTileError::ValidityError)
+    pub fn end_node_id(&self) -> GraphId {
+        // Safety: We know the number of bits is limited
+        unsafe { GraphId::from_id_unchecked(self.first_bitfield.end_node()) }
+    }
+
+    /// The way the edge is used.
+    ///
+    /// # Panics
+    ///
+    /// This function currently panics if the edge use contains an invalid bit pattern.
+    /// We should check the validity of the field when we do the initial try_transmute
+    /// on the type (and then have an error result that the tile is invalid).
+    /// There are some upstream bugs though between zerocopy and bitfield-struct
+    /// macros: https://github.com/google/zerocopy/issues/388.
+    #[inline]
+    pub fn edge_use(&self) -> RoadUse {
+        try_transmute!(self.third_bitfield.edge_use())
+            .map_err(|_| GraphTileError::ValidityError)
+            .expect("Invalid bit pattern for edge use.")
     }
 
     /// Is this a transit line (buss or rail)?
+    ///
+    /// # Panics
+    ///
+    /// Can panic as a result of the issues noted in [`Self::edge_use`].
     #[inline]
     pub fn is_transit_line(&self) -> bool {
-        self.edge_use().map_or(false, |edge_use| {
-            edge_use == RoadUse::Rail || edge_use == RoadUse::Bus
-        })
+        let edge_use = self.edge_use();
+        edge_use == RoadUse::Rail || edge_use == RoadUse::Bus
+    }
+
+    /// Gets the index of the opposing directed edge at the end node of this directed edge.
+    ///
+    /// Can be used to find the start node of this directed edge.
+    #[inline]
+    pub fn opposing_edge_index(&self) -> u32 {
+        self.first_bitfield.opposing_edge_index()
+    }
+
+    /// Is this edge a shortcut?
+    #[inline]
+    pub fn is_shortcut(&self) -> bool {
+        self.seventh_bitfield.is_shortcut() != 0
     }
 }
+
+/// Extended directed edge attributes.
+///
+/// This structure provides the ability to add extra
+/// attributes to directed edges without breaking backward compatibility.
+/// For now this structure is unused
+#[derive(FromBytes, Debug)]
+#[repr(C)]
+pub struct DirectedEdgeExt(u64);
 
 #[cfg(test)]
 mod test {
