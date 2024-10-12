@@ -1,5 +1,5 @@
-use std::fmt::{Display, Formatter};
 use crate::tile_hierarchy::{STANDARD_LEVELS, TRANSIT_LEVEL};
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -177,7 +177,12 @@ impl GraphId {
 
 impl Display for GraphId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("GraphId {}/{}/{}", self.level(), self.tile_id(), self.tile_index()))
+        f.write_fmt(format_args!(
+            "GraphId {}/{}/{}",
+            self.level(),
+            self.tile_id(),
+            self.tile_index()
+        ))
     }
 }
 

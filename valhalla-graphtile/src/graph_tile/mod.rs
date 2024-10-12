@@ -155,6 +155,20 @@ impl GraphTile {
         }
     }
 
+    /// Gets the opposing edge index, if and only if it exists in this tile.
+    pub fn get_opp_edge_id(&self, graph_id: &GraphId) -> Result<u32, LookupError> {
+        let edge = self.get_directed_edge(graph_id)?;
+
+        // The edge might leave the tile, so we have to do a complicated lookup
+        let end_node_id = edge.end_node_id();
+        let opp_edge_index = edge.opposing_edge_index();
+
+        // TODO: Probably a cleaner pattern here?
+        let node_edge_index = self.get_node(&end_node_id).map(|n| n.edge_index())?;
+
+        Ok(node_edge_index + opp_edge_index)
+    }
+
     /// Gets a reference to an extended directed edge in this tile by graph ID.
     ///
     /// # Errors

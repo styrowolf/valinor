@@ -46,19 +46,14 @@ pub trait GraphTileProvider {
     /// # Performance
     ///
     /// This method always has to do a tile lookup (potentially cached, but a lookup nonetheless).
-    /// TODO: Provide APIs which will try to use the existing tile
+    /// This is MUCH slower than looking at the tile first, so you should always call
+    /// [`GraphTile::get_opp_edge_id`] first.
     fn get_opposing_edge(
         &self,
         graph_id: &GraphId,
-    ) -> Result<Option<(GraphId, GraphTile)>, GraphTileProviderError> {
+    ) -> Result<(GraphId, GraphTile), GraphTileProviderError> {
         let tile = self.get_tile(graph_id)?;
         let edge = tile.get_directed_edge(graph_id)?;
-
-        // Valhalla does not currently implement this method for transit edges
-        // TODO: Does such a check belong in this method?
-        if edge.is_transit_line() {
-            return Ok(None);
-        }
 
         // The edge might leave the tile, so we have to do a complicated lookup
         let end_node_id = edge.end_node_id();
@@ -86,7 +81,7 @@ pub trait GraphTileProvider {
         // TODO: Should we try to return the edge too?
         // let edge = opp_tile.get_directed_edge(&id)?;
 
-        Ok(Some((id, opp_tile)))
+        Ok((id, opp_tile))
     }
     // TODO: Coordinate, bbox, etc. (can have implementations that are generic!!)
 }

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -5,7 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::OnceLock;
-use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile};
+use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
@@ -142,8 +143,8 @@ fn main() -> anyhow::Result<()> {
             if (cli.skip_transit && edge.is_transit_line())
                 || edge.is_shortcut()
                 || (cli.skip_ferries && edge.edge_use() == RoadUse::Ferry)
-                // TODO
-                // || (cli.skip_unnamed && edge.names().is_empty())
+            // TODO
+            // || (cli.skip_unnamed && edge.names().is_empty())
             {
                 continue;
             }
@@ -151,7 +152,27 @@ fn main() -> anyhow::Result<()> {
             // Get the opposing edge
 
             // FIXME: Perf is really bad when the typical case is reading the same tile over and over...
-            let Some((opp_id, opp_tile)) = reader.get_opposing_edge(&edge_id)? else { continue };
+            let (opp_id, opp_tile) = match tile.clone().get_opp_edge_id(&edge_id) {
+                Ok(opp_edge_id) => {
+                    // TODO: Verify that it matches the slow path
+                    let opp_graph_id = GraphId::try_from_components(
+                        edge_id.level(),
+                        edge_id.tile_id(),
+                        opp_edge_id as u64,
+                    )?;
+                    // TODO: Make some code like this into a property test
+                    // let (slow_id, _) = reader.get_opposing_edge(&edge_id)?.unwrap();
+                    // assert_eq!(slow_id, opp_graph_id);
+                    (opp_graph_id, tile.clone())
+                }
+                Err(LookupError::InvalidIndex) => {
+                    return Err(LookupError::InvalidIndex)?;
+                }
+                Err(LookupError::MismatchedBase) => {
+                    let (opp_graph_id, tile) = reader.get_opposing_edge(&edge_id)?;
+                    (opp_graph_id, Rc::new(tile))
+                }
+            };
             progress_bar.as_ref().inspect(|bar| bar.inc(1));
             if let Some(offset) = tile_set.get(&opp_id.tile_base_id()) {
                 processed_edges.insert(offset + opp_id.tile_index() as usize);
@@ -163,7 +184,11 @@ fn main() -> anyhow::Result<()> {
             // TODO: Traverse forward and backward from the edge
 
             // Keep some state about this section of road
-            let mut edges: Vec<EdgePointer> = vec![EdgePointer { graph_id: edge_id, tile: tile.clone(), edge }];
+            let mut edges: Vec<EdgePointer> = vec![EdgePointer {
+                graph_id: edge_id,
+                tile: tile.clone(),
+                edge,
+            }];
 
             // TODO: Build the shape from the similar edges found
 
