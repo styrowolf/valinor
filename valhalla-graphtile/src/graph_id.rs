@@ -34,8 +34,21 @@ pub enum InvalidGraphIdError {
 }
 
 /// An Identifier of a node or an edge within the tiled, hierarchical graph.
-/// It packs a tile ID, hierarchy level, and a unique identifier within
+/// It packs a hierarchy level, tile ID, and a unique identifier within
 /// the tile/level into a 64-bit integer.
+///
+/// # Hierarchy
+///
+/// Valhalla organizes tiles into several levels.
+/// For a description of the common ones, see [`STANDARD_LEVELS`]
+/// and [`TRANSIT_LEVEL`].
+/// Each level includes progressively more "local" roads.
+/// This helps improve efficiency.
+///
+/// Each level contains square tiles of a fixed size (noted in the level definition).
+/// And within each tile, features are identified by a node or edge index.
+///
+/// # Bit field layout
 ///
 /// Bit fields within the ID include:
 ///   - 3 bits for hierarchy level (these are the least significant 3 bits)
@@ -56,6 +69,7 @@ impl GraphId {
     /// - `level` - 3 bits
     /// - `tile_id` - 22 bits
     /// - `index` - 21 bits
+    #[inline]
     pub fn try_from_components(
         level: u8,
         tile_id: u64,
@@ -99,6 +113,21 @@ impl GraphId {
         Self(id)
     }
 
+    /// Creates a new graph ID from the existing one, but with a new tile index.
+    /// This is useful for indexing within a tile.
+    ///
+    /// # Errors
+    ///
+    /// See [`GraphId::try_from_components`] for a description of errors.
+    #[inline]
+    pub fn with_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
+        Self::try_from_components(
+            self.level(),
+            self.tile_id(),
+            tile_index,
+        )
+    }
+
     /// Extracts the raw (packed) graph ID value.
     #[inline]
     pub const fn value(&self) -> u64 {
@@ -118,9 +147,9 @@ impl GraphId {
         (self.value() & 0x01ff_fff8) >> 3
     }
 
-    /// Gets the unique identifier (index) within the hierarchy level.
+    /// Gets the unique identifier (index) within the tile and level.
     #[inline]
-    pub const fn tile_index(&self) -> u64 {
+    pub const fn index(&self) -> u64 {
         (self.value() & 0x3fff_fe00_0000) >> 25
     }
 
@@ -181,7 +210,7 @@ impl Display for GraphId {
             "GraphId {}/{}/{}",
             self.level(),
             self.tile_id(),
-            self.tile_index()
+            self.index()
         ))
     }
 }
@@ -223,7 +252,7 @@ mod tests {
         assert_eq!(graph_id, GraphId(0));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
-        assert_eq!(graph_id.tile_index(), 0);
+        assert_eq!(graph_id.index(), 0);
     }
 
     #[test]
@@ -241,7 +270,7 @@ mod tests {
         );
         assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
         assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
-        assert_eq!(graph_id.tile_index(), MAX_TILE_INDEX);
+        assert_eq!(graph_id.index(), MAX_TILE_INDEX);
     }
 
     #[test]
@@ -257,7 +286,7 @@ mod tests {
         );
         assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
         assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
-        assert_eq!(graph_id.tile_index(), MAX_TILE_INDEX);
+        assert_eq!(graph_id.index(), MAX_TILE_INDEX);
     }
 
     #[test]

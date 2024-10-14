@@ -289,38 +289,11 @@ impl GraphTileHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
-    use geo::coord;
+    use crate::graph_tile::{TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_header() {
         let tile = &*TEST_GRAPH_TILE;
-        let header = &tile.header;
-
-        assert_eq!(header.graph_id(), *TEST_GRAPH_TILE_ID);
-        assert_eq!(header.density(), 0);
-        assert_eq!(header.name_quality(), 0);
-        assert_eq!(header.speed_quality(), 0);
-        assert_eq!(header.exit_quality(), 0);
-        assert_eq!(header.has_elevation(), false);
-        assert_eq!(header.has_ext_directed_edge(), false);
-        assert_eq!(header.sw_corner(), coord! {x: 0.0, y: 42.0 });
-        assert_eq!(header.version(), "3.5.0");
-        assert_eq!(header.dataset_id, 12218323114);
-        assert_eq!(header.node_count(), 1343);
-        assert_eq!(header.directed_edge_count(), 3426);
-        assert_eq!(header.predicted_speeds_count(), 0);
-        assert_eq!(header.transition_count(), 712);
-        assert_eq!(header.turn_lane_count(), 6);
-        // TODO: Build and test some transit tiles
-        assert_eq!(header.transfer_count(), 0);
-        assert_eq!(header.departure_count(), 0);
-        assert_eq!(header.stop_count(), 0);
-        assert_eq!(header.route_count(), 0);
-        assert_eq!(header.schedule_count(), 0);
-        assert_eq!(header.sign_count(), 0);
-        assert_eq!(header.access_restriction_count(), 8);
-        assert_eq!(header.admin_count(), 4);
 
         insta::assert_debug_snapshot!(tile.header);
     }

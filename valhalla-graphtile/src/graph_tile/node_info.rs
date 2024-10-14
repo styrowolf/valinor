@@ -214,18 +214,18 @@ impl NodeInfo {
         self.third_bit_field.transition_count()
     }
 
-    /// The traversability of the local directed edge given a local edge index.
-    ///
-    /// TODO: Convert this into a traversability value
-    #[inline]
-    pub const fn traversability(&self, local_edge_index: u16) -> u16 {
-        // let s = u32::from(local_edge_index) * 2;  // 2 bits per index
-        // static_cast<Traversability>((local_driveability_ & (3 << s)) >> s);
-        // Traversability values are an enum with none, forward, backward, and both
-        // defined as 0, 1, 2, and 3 respectively.
-        // This makes them a perfect enum set with two variants forward and backward.
-        self.third_bit_field.local_driveability()
-    }
+    // /// The traversability of the local directed edge given a local edge index.
+    // ///
+    // /// TODO: Convert this into a traversability value
+    // #[inline]
+    // pub const fn traversability(&self, local_edge_index: u16) -> u16 {
+    //     // let s = u32::from(local_edge_index) * 2;  // 2 bits per index
+    //     // static_cast<Traversability>((local_driveability_ & (3 << s)) >> s);
+    //     // Traversability values are an enum with none, forward, backward, and both
+    //     // defined as 0, 1, 2, and 3 respectively.
+    //     // This makes them a perfect enum set with two variants forward and backward.
+    //     self.third_bit_field.local_driveability()
+    // }
 
     /// The number of regular edges across all levels.
     ///

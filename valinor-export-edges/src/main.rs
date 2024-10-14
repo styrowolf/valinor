@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -129,8 +128,7 @@ fn main() -> anyhow::Result<()> {
 
             // Get the edge
             // TODO: Helper for rewriting the index of a graph ID?
-            let edge_id =
-                GraphId::try_from_components(graph_id.level(), graph_id.tile_id(), index as u64)?;
+            let edge_id = graph_id.with_index(index as u64)?;
             let edge = tile.get_directed_edge(&edge_id)?;
 
             // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
@@ -151,18 +149,9 @@ fn main() -> anyhow::Result<()> {
 
             // Get the opposing edge
 
-            // FIXME: Perf is really bad when the typical case is reading the same tile over and over...
-            let (opp_id, opp_tile) = match tile.clone().get_opp_edge_id(&edge_id) {
+            let (opp_id, opp_tile) = match tile.clone().get_opp_edge_index(&edge_id) {
                 Ok(opp_edge_id) => {
-                    // TODO: Verify that it matches the slow path
-                    let opp_graph_id = GraphId::try_from_components(
-                        edge_id.level(),
-                        edge_id.tile_id(),
-                        opp_edge_id as u64,
-                    )?;
-                    // TODO: Make some code like this into a property test
-                    // let (slow_id, _) = reader.get_opposing_edge(&edge_id)?.unwrap();
-                    // assert_eq!(slow_id, opp_graph_id);
+                    let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
                     (opp_graph_id, tile.clone())
                 }
                 Err(LookupError::InvalidIndex) => {
@@ -175,7 +164,7 @@ fn main() -> anyhow::Result<()> {
             };
             progress_bar.as_ref().inspect(|bar| bar.inc(1));
             if let Some(offset) = tile_set.get(&opp_id.tile_base_id()) {
-                processed_edges.insert(offset + opp_id.tile_index() as usize);
+                processed_edges.insert(offset + opp_id.index() as usize);
             } else {
                 // This happens in extracts, but shouldn't for the planet...
                 eprintln!("Missing opposite edge {opp_id} in tile set");

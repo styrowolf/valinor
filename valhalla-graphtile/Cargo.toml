@@ -13,6 +13,7 @@ zerocopy-derive = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+rand = { workspace = true }
 
 [lints]
 workspace = true

@@ -12,6 +12,7 @@ bit-set = "0.8.0"
 geo = "0.28.0"
 indicatif = "0.17.8"
 insta = { version = "1.40.0", features = ["yaml"] }
+rand = "0.8.5"
 thiserror = "1.0.64"
 zerocopy = "0.8.5"
 zerocopy-derive = "0.8.5"

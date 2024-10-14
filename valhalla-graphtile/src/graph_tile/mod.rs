@@ -132,7 +132,7 @@ impl GraphTile {
     pub fn get_node(&self, id: &GraphId) -> Result<&NodeInfo, LookupError> {
         if self.may_contain_id(id) {
             self.nodes
-                .get(id.tile_index() as usize)
+                .get(id.index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -148,7 +148,7 @@ impl GraphTile {
     pub fn get_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdge, LookupError> {
         if self.may_contain_id(id) {
             self.directed_edges
-                .get(id.tile_index() as usize)
+                .get(id.index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -156,7 +156,7 @@ impl GraphTile {
     }
 
     /// Gets the opposing edge index, if and only if it exists in this tile.
-    pub fn get_opp_edge_id(&self, graph_id: &GraphId) -> Result<u32, LookupError> {
+    pub fn get_opp_edge_index(&self, graph_id: &GraphId) -> Result<u32, LookupError> {
         let edge = self.get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
@@ -178,7 +178,7 @@ impl GraphTile {
     pub fn get_ext_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdgeExt, LookupError> {
         if self.may_contain_id(id) {
             self.ext_directed_edges
-                .get(id.tile_index() as usize)
+                .get(id.index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -267,3 +267,21 @@ static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
 
     GraphTile::try_from(bytes.as_bytes()).expect("Unable to get tile")
 });
+
+#[cfg(test)]
+mod tests {
+    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+
+    #[test]
+    fn test_get_opp_edge_index() {
+        let graph_id = &*TEST_GRAPH_TILE_ID;
+        let tile = &*TEST_GRAPH_TILE;
+
+        let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count())).map(|index| {
+            let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
+            let opp_edge_index = tile.get_opp_edge_index(&edge_id).expect("Unable to get opp edge index.");
+            opp_edge_index
+        }).collect();
+        insta::assert_debug_snapshot!(edges);
+    }
+}

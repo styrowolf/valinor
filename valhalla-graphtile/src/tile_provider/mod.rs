@@ -47,7 +47,7 @@ pub trait GraphTileProvider {
     ///
     /// This method always has to do a tile lookup (potentially cached, but a lookup nonetheless).
     /// This is MUCH slower than looking at the tile first, so you should always call
-    /// [`GraphTile::get_opp_edge_id`] first.
+    /// [`GraphTile::get_opp_edge_index`] first.
     fn get_opposing_edge(
         &self,
         graph_id: &GraphId,
