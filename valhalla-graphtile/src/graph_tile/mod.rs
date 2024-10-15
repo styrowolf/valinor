@@ -17,16 +17,15 @@ use zerocopy::IntoBytes;
 mod access_restriction;
 mod directed_edge;
 mod header;
-mod node_info;
-mod node_transition;
+mod node;
+mod transit;
 
 use crate::{Access, GraphId};
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
-pub use directed_edge::DirectedEdge;
-pub use directed_edge::DirectedEdgeExt;
+pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
 pub use header::GraphTileHeader;
-pub use node_info::NodeInfo;
-pub use node_transition::NodeTransition;
+pub use node::{NodeInfo, NodeTransition};
+pub use transit::{TransitDeparture, TransitStop, TransitRoute, TransitSchedule, TransitTransfer};
 
 /// Transmutes variable length data into a Vec<T>.
 /// This can't be written as a function because the const generics
@@ -45,7 +44,7 @@ macro_rules! transmute_variable_length_data {
 }
 
 /// Tries to transmute variable length data into a Vec<T>.
-/// Analoguous to [`transmute_variable_length_data`],
+/// Analogous to [`transmute_variable_length_data`],
 /// but for types implementing [`zerocopy::TryFromBytes`]
 /// rather than [`zerocopy::FromBytes`].
 macro_rules! try_transmute_variable_length_data {
@@ -186,20 +185,22 @@ impl GraphTile {
         }
     }
 
-    /// Gets access restriction by directed edge index
+    /// Gets access restriction for a directed edge
+    /// which apply to *any* of the supplied access modes (ex: auto, bicycle, etc.).
     pub fn get_access_restrictions(
         &self,
         directed_edge_index: u32,
         access_modes: EnumSet<Access>,
     ) -> Vec<&AccessRestriction> {
-        // Partition the list such that all elements below index are less than directed_edge_index
+        // Find the point such that all elements below index are less than directed_edge_index
+        // (NOTE: the list is pre-sorted during tile building)
         let index = self
             .access_restrictions
             .partition_point(|e| e.edge_index() < directed_edge_index);
 
         self.access_restrictions
             .iter()
-            // Iterate over the partition (empty iterator if index > length)
+            // Iterate over the relevant objects (this is an empty iterator if index >= length)
             .skip(index)
             .take_while(|e| e.edge_index() == directed_edge_index)
             .filter(|e| !e.affected_access_modes().is_disjoint(access_modes))
@@ -217,17 +218,17 @@ impl TryFrom<&[u8]> for GraphTile {
         // Save the pointer to the list of nodes (the range is consumed)
         let nodes_offset = header_range.end;
 
-        // Parse the header
+        // Header
         let header_slice: [u8; size_of::<GraphTileHeader>()] = value[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
-        // TODO: Clean this repetitive mess up with a macro or something...
+        // TODO: Clean this repetitive mess up with a macro or something?
 
-        // Parse the list of nodes
+        // Nodes
         let node_count = header.node_count() as usize;
         let nodes = transmute_variable_length_data!(NodeInfo, &value[nodes_offset..], node_count)?;
 
-        // Parse the list of transitions
+        // Transitions
         let transitions_offset = nodes_offset + (size_of::<NodeInfo>() * node_count);
         let transition_count = header.transition_count() as usize;
         let transitions = transmute_variable_length_data!(
@@ -236,7 +237,7 @@ impl TryFrom<&[u8]> for GraphTile {
             transition_count
         )?;
 
-        // Parse the list of directed edges
+        // Directed edges
         let directed_edges_offset =
             transitions_offset + (size_of::<NodeTransition>() * transition_count);
         let directed_edge_count = header.directed_edge_count() as usize;
@@ -246,7 +247,7 @@ impl TryFrom<&[u8]> for GraphTile {
             directed_edge_count
         )?;
 
-        // Parse the list of extended directed edges
+        // Extended directed edges
         let directed_edges_ext_offset =
             directed_edges_offset + (size_of::<DirectedEdge>() * directed_edge_count);
         let directed_edge_ext_count = if header.has_ext_directed_edge() {
@@ -260,7 +261,7 @@ impl TryFrom<&[u8]> for GraphTile {
             directed_edge_ext_count
         )?;
 
-        // Parse the list of access restrictions
+        // Access restrictions
         let access_restrictions_offset =
             directed_edges_ext_offset + (size_of::<DirectedEdgeExt>() * directed_edge_ext_count);
         let access_restriction_count = header.access_restriction_count() as usize;

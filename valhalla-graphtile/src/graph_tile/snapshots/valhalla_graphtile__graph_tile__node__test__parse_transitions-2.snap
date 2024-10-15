@@ -1,5 +1,5 @@
 ---
-source: valhalla-graphtile/src/graph_tile/node_transition.rs
+source: valhalla-graphtile/src/graph_tile/node.rs
 expression: tile.transitions.last().unwrap()
 ---
 NodeTransition {
