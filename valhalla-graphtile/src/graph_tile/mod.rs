@@ -1,9 +1,9 @@
 use thiserror::Error;
 use zerocopy::{transmute, try_transmute};
 
+use enumset::EnumSet;
 #[cfg(test)]
 use std::sync::LazyLock;
-
 #[cfg(test)]
 use zerocopy::IntoBytes;
 
@@ -14,12 +14,14 @@ use zerocopy::IntoBytes;
 // and test the first and last elements of variable length vectors
 // with snapshot tests.
 
+mod access_restriction;
 mod directed_edge;
 mod header;
 mod node_info;
 mod node_transition;
 
-use crate::GraphId;
+use crate::{Access, GraphId};
+pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use directed_edge::DirectedEdge;
 pub use directed_edge::DirectedEdgeExt;
 pub use header::GraphTileHeader;
@@ -84,9 +86,8 @@ pub struct GraphTile {
     /// The list of transitions between nodes on different levels.
     transitions: Vec<NodeTransition>,
     directed_edges: Vec<DirectedEdge>,
-    // TODO: Extended directed edges
     ext_directed_edges: Vec<DirectedEdgeExt>,
-    // TODO: Access restrictions (conditional?)
+    access_restrictions: Vec<AccessRestriction>,
     // TODO: Transit departures
     // TODO: Transit stops
     // TODO: Transit routes
@@ -98,7 +99,7 @@ pub struct GraphTile {
     // TODO: Complex forward restrictions
     // TODO: Complex reverse restrictions
     // TODO: Edge info (shapes are here)
-    // TODO: Street names
+    // TODO: Street names (names here)
     // TODO: Edge bins
     // TODO: Lane connectivity
     // TODO: Predicted speeds
@@ -184,6 +185,26 @@ impl GraphTile {
             Err(LookupError::MismatchedBase)
         }
     }
+
+    /// Gets access restriction by directed edge index
+    pub fn get_access_restrictions(
+        &self,
+        directed_edge_index: u32,
+        access_modes: EnumSet<Access>,
+    ) -> Vec<&AccessRestriction> {
+        // Partition the list such that all elements below index are less than directed_edge_index
+        let index = self
+            .access_restrictions
+            .partition_point(|e| e.edge_index() < directed_edge_index);
+
+        self.access_restrictions
+            .iter()
+            // Iterate over the partition (empty iterator if index > length)
+            .skip(index)
+            .take_while(|e| e.edge_index() == directed_edge_index)
+            .filter(|e| !e.affected_access_modes().is_disjoint(access_modes))
+            .collect()
+    }
 }
 
 impl TryFrom<&[u8]> for GraphTile {
@@ -227,7 +248,7 @@ impl TryFrom<&[u8]> for GraphTile {
 
         // Parse the list of extended directed edges
         let directed_edges_ext_offset =
-            transitions_offset + (size_of::<DirectedEdge>() * directed_edge_count);
+            directed_edges_offset + (size_of::<DirectedEdge>() * directed_edge_count);
         let directed_edge_ext_count = if header.has_ext_directed_edge() {
             header.directed_edge_count() as usize
         } else {
@@ -239,12 +260,23 @@ impl TryFrom<&[u8]> for GraphTile {
             directed_edge_ext_count
         )?;
 
+        // Parse the list of access restrictions
+        let access_restrictions_offset =
+            directed_edges_ext_offset + (size_of::<DirectedEdgeExt>() * directed_edge_ext_count);
+        let access_restriction_count = header.access_restriction_count() as usize;
+        let access_restrictions = try_transmute_variable_length_data!(
+            AccessRestriction,
+            &value[access_restrictions_offset..],
+            access_restriction_count
+        )?;
+
         Ok(Self {
             header,
             nodes,
             transitions,
             directed_edges,
             ext_directed_edges,
+            access_restrictions,
         })
     }
 }
@@ -271,17 +303,64 @@ static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+    use crate::Access;
+    use enumset::{enum_set, EnumSet};
 
     #[test]
     fn test_get_opp_edge_index() {
         let graph_id = &*TEST_GRAPH_TILE_ID;
         let tile = &*TEST_GRAPH_TILE;
 
-        let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count())).map(|index| {
-            let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
-            let opp_edge_index = tile.get_opp_edge_index(&edge_id).expect("Unable to get opp edge index.");
-            opp_edge_index
-        }).collect();
+        let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count()))
+            .map(|index| {
+                let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
+                let opp_edge_index = tile
+                    .get_opp_edge_index(&edge_id)
+                    .expect("Unable to get opp edge index.");
+                opp_edge_index
+            })
+            .collect();
         insta::assert_debug_snapshot!(edges);
+    }
+
+    #[test]
+    fn test_get_get_access_restrictions() {
+        let graph_id = &*TEST_GRAPH_TILE_ID;
+        let tile = &*TEST_GRAPH_TILE;
+
+        let mut found_restriction_count = 0;
+        let mut found_partial_subset_count = 0;
+        for edge_index in 0..tile.header.directed_edge_count() {
+            // Sanity check edge index with no access mode filter
+            let all_edge_restrictions = tile.get_access_restrictions(edge_index, EnumSet::all());
+            for restriction in &all_edge_restrictions {
+                found_restriction_count += 1;
+                assert_eq!(restriction.edge_index(), edge_index);
+            }
+
+            // In the tile fixture, all restrictions apply to trucks
+            assert_eq!(
+                all_edge_restrictions,
+                tile.get_access_restrictions(edge_index, enum_set!(Access::Truck))
+            );
+
+            // Empty set should yield no access restrictions
+            assert!(tile
+                .get_access_restrictions(edge_index, EnumSet::empty())
+                .is_empty());
+
+            // This set includes one mode that matches 4 elements in the fixture tile,
+            // and another mode that matches none.
+            for restriction in
+                tile.get_access_restrictions(edge_index, enum_set!(Access::Auto | Access::GolfCart))
+            {
+                found_partial_subset_count += 1;
+                assert_eq!(restriction.edge_index(), edge_index);
+            }
+        }
+
+        // Hard-coded bits based on the test fixture
+        assert_eq!(found_restriction_count, 8);
+        assert_eq!(found_partial_subset_count, 4);
     }
 }

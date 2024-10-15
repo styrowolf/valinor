@@ -121,11 +121,7 @@ impl GraphId {
     /// See [`GraphId::try_from_components`] for a description of errors.
     #[inline]
     pub fn with_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
-        Self::try_from_components(
-            self.level(),
-            self.tile_id(),
-            tile_index,
-        )
+        Self::try_from_components(self.level(), self.tile_id(), tile_index)
     }
 
     /// Extracts the raw (packed) graph ID value.

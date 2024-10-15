@@ -289,7 +289,7 @@ impl GraphTileHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::{TEST_GRAPH_TILE};
+    use crate::graph_tile::TEST_GRAPH_TILE;
 
     #[test]
     fn test_parse_header() {

@@ -10,7 +10,7 @@ pub mod graph_tile;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 
-use enumset::EnumSetType;
+use enumset::{enum_set, EnumSet, EnumSetType};
 use zerocopy_derive::TryFromBytes;
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,
@@ -38,8 +38,6 @@ pub enum RoadClass {
 }
 
 /// Sub-categorization of roads based on specialized usage.
-///
-/// NOTE: This is packed in a 6-bit field; the maximum usable value is 63!
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum RoadUse {
@@ -118,6 +116,7 @@ pub enum RoadUse {
     PlatformConnection = 53,
     /// Connection osm <-> egress
     TransitConnection = 54,
+    // WARNING: This is a 6-bit field, so never add a value higher than 63!
 }
 
 /// Access permission by travel type.
@@ -140,9 +139,20 @@ pub enum Access {
     Moped,
     Motorcycle,
     GolfCart,
-    // NOTE: Only 12 bits are allowed to be used!
+    // NOTE: Only 12 bits are allowed to be used, so this enum cannot contain any more variants!
     // All = 4095,
 }
+
+pub const VEHICULAR_ACCESS: EnumSet<Access> = enum_set!(
+    Access::Auto
+        | Access::Truck
+        | Access::Moped
+        | Access::Motorcycle
+        | Access::Taxi
+        | Access::Bus
+        | Access::HOV
+        | Access::GolfCart
+);
 
 /// The number of subdivisions in each graph tile
 const BIN_COUNT: u8 = 25;

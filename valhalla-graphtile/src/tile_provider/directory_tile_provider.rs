@@ -37,8 +37,11 @@ mod test {
     use super::DirectoryTileProvider;
     use crate::tile_provider::GraphTileProvider;
     use crate::GraphId;
+    use rand::{
+        distributions::{Distribution, Uniform},
+        thread_rng,
+    };
     use std::path::PathBuf;
-    use rand::{thread_rng, distributions::{Uniform, Distribution}};
 
     #[test]
     fn test_get_tile() {
@@ -71,8 +74,12 @@ mod test {
         let range = Uniform::from(0..u64::from(tile.header.directed_edge_count()));
         for index in range.sample_iter(&mut rng).take(100) {
             let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
-            let opp_edge_index = tile.get_opp_edge_index(&edge_id).expect("Unable to get opp edge index.");
-            let (opp_edge_id, _) = provider.get_opposing_edge(&edge_id).expect("Unable to get opposing edge.");
+            let opp_edge_index = tile
+                .get_opp_edge_index(&edge_id)
+                .expect("Unable to get opp edge index.");
+            let (opp_edge_id, _) = provider
+                .get_opposing_edge(&edge_id)
+                .expect("Unable to get opposing edge.");
             assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
         }
     }
