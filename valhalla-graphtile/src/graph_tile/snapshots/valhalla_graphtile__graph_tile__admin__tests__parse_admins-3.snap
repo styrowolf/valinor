@@ -1,0 +1,10 @@
+---
+source: valhalla-graphtile/src/graph_tile/admin.rs
+expression: "tile.admins.iter().map(|admin|\nadmin.principal_subdivision_iso()).collect::<Vec<_>>()"
+---
+[
+    "",
+    "",
+    "CT",
+    "OCC",
+]
