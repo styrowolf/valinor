@@ -1,4 +1,4 @@
-use crate::{GraphId, BIN_COUNT};
+use crate::{AsCowStr, GraphId, BIN_COUNT};
 use bitfield_struct::bitfield;
 use geo::{coord, Coord};
 use std::borrow::Cow;
@@ -205,8 +205,7 @@ impl GraphTileHeader {
 
     /// Gets the version of Baldr used to generate this graph tile.
     pub fn version(&self) -> Cow<'_, str> {
-        let index = self.version.iter().position(|c| *c == 0).unwrap_or(16);
-        String::from_utf8_lossy(&self.version[0..index])
+        self.version.as_cow_str()
     }
 
     #[inline]

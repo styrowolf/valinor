@@ -10,6 +10,7 @@ pub mod graph_tile;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 
+use std::borrow::Cow;
 use enumset::{enum_set, EnumSet, EnumSetType};
 use zerocopy_derive::TryFromBytes;
 // Pub use for re-export without too many levels of hierarchy.
@@ -156,6 +157,22 @@ pub const VEHICULAR_ACCESS: EnumSet<Access> = enum_set!(
 
 /// The number of subdivisions in each graph tile
 const BIN_COUNT: u8 = 25;
+
+trait AsCowStr {
+    fn as_cow_str(&self) -> Cow<'_, str>;
+}
+
+impl<const N: usize> AsCowStr for [u8; N] {
+    /// Converts the value to a [`Cow<str>`],
+    /// where the bytes are interpreted as UTF-8,
+    /// lossily if needed.
+    /// The resulting string will stop before the first null byte
+    /// (the result may be empty).
+    fn as_cow_str(&self) -> Cow<'_, str> {
+        let null_index = self.iter().position(|c| *c == 0).unwrap_or(self.len());
+        String::from_utf8_lossy(&self[0..null_index])
+    }
+}
 
 #[cfg(test)]
 mod tests {

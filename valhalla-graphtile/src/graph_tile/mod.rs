@@ -15,19 +15,24 @@ use zerocopy::IntoBytes;
 // with snapshot tests.
 
 mod access_restriction;
+mod admin;
 mod directed_edge;
 mod header;
 mod node;
 mod sign;
 mod transit;
+mod turn_lane;
 
 use crate::{Access, GraphId};
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
+pub use admin::Admin;
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
 pub use header::GraphTileHeader;
 pub use node::{NodeInfo, NodeTransition};
 pub use sign::{Sign, SignType};
 pub use transit::{TransitDeparture, TransitRoute, TransitSchedule, TransitStop, TransitTransfer};
+pub use turn_lane::TurnLane;
+use crate::graph_id::InvalidGraphIdError;
 
 /// Transmutes variable length data into a Vec<T>.
 /// This can't be written as a function because the const generics
@@ -70,6 +75,8 @@ pub enum GraphTileError {
     SliceArrayConversion(#[from] std::array::TryFromSliceError),
     #[error("The byte sequence is not valid for this type.")]
     ValidityError,
+    #[error("Invalid graph ID.")]
+    GraphIdParseError(#[from] InvalidGraphIdError),
 }
 
 #[derive(Debug, Error)]
@@ -97,8 +104,9 @@ pub struct GraphTile {
     transit_schedules: Vec<TransitSchedule>,
     transit_transfers: Vec<TransitTransfer>,
     signs: Vec<Sign>,
-    // TODO: Turn lanes
-    // TODO: Admins
+    turn_lanes: Vec<TurnLane>,
+    admins: Vec<Admin>,
+    edge_bins: GraphId,
     // TODO: Complex forward restrictions
     // TODO: Complex reverse restrictions
     // TODO: Edge info (shapes are here)
@@ -217,13 +225,14 @@ impl TryFrom<&[u8]> for GraphTile {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         // Get the byte range of the header so we can transmute it
-        let header_range = 0..size_of::<GraphTileHeader>();
+        const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
+        let header_range = 0..HEADER_SIZE;
 
         // Save the pointer to the list of nodes (the range is consumed)
         let offset = header_range.end;
 
         // Header
-        let header_slice: [u8; size_of::<GraphTileHeader>()] = value[header_range].try_into()?;
+        let header_slice: [u8; HEADER_SIZE] = value[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
         // All the variably sized data arrays
@@ -302,6 +311,25 @@ impl TryFrom<&[u8]> for GraphTile {
         let (signs, offset) =
             try_transmute_variable_length_data!(Sign, value, offset, header.sign_count() as usize)?;
 
+        let (turn_lanes, offset) = try_transmute_variable_length_data!(
+            TurnLane,
+            value,
+            offset,
+            header.turn_lane_count() as usize
+        )?;
+
+        let (admins, offset) = try_transmute_variable_length_data!(
+            Admin,
+            value,
+            offset,
+            header.admin_count() as usize
+        )?;
+
+        const U64_SIZE: usize = size_of::<u64>();
+        let slice: [u8; U64_SIZE] = (&value[offset..offset + U64_SIZE]).try_into()?;
+        let raw_graph_id = transmute!(slice);
+        let edge_bins = GraphId::try_from_id(raw_graph_id)?;
+
         Ok(Self {
             header,
             nodes,
@@ -315,6 +343,9 @@ impl TryFrom<&[u8]> for GraphTile {
             transit_schedules,
             transit_transfers,
             signs,
+            turn_lanes,
+            admins,
+            edge_bins,
         })
     }
 }
@@ -341,8 +372,9 @@ static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
-    use crate::Access;
+    use crate::{Access, GraphId};
     use enumset::{enum_set, EnumSet};
+    use crate::graph_id::InvalidGraphIdError::InvalidGraphId;
 
     #[test]
     fn test_get_opp_edge_index() {
@@ -362,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_get_access_restrictions() {
+    fn test_get_access_restrictions() {
         let tile = &*TEST_GRAPH_TILE;
 
         let mut found_restriction_count = 0;
@@ -399,5 +431,14 @@ mod tests {
         // Hard-coded bits based on the test fixture
         assert_eq!(found_restriction_count, 8);
         assert_eq!(found_partial_subset_count, 4);
+    }
+
+    #[test]
+    fn test_edge_bins() {
+        // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
+        let tile = &*TEST_GRAPH_TILE;
+        assert_eq!(tile.edge_bins.level(), 0);
+        assert_eq!(tile.edge_bins.tile_id() , 0);
+        assert_eq!(tile.edge_bins.index() , 32000);
     }
 }
