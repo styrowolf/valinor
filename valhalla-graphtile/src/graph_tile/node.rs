@@ -135,7 +135,6 @@ impl NodeTransition {
     }
 }
 
-
 impl NodeInfo {
     /// Gets the coordinate of the node.
     /// The data is stored as a relative offset internally,

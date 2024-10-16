@@ -31,15 +31,16 @@ pub use transit::{TransitDeparture, TransitStop, TransitRoute, TransitSchedule, 
 /// This can't be written as a function because the const generics
 /// require explicit types and that context isn't available from function generic params.
 macro_rules! transmute_variable_length_data {
-    ($type:ty, $data:expr, $item_count:expr) => {{
+    ($type:ty, $data:expr, $offset:expr, $item_count:expr) => {{
         const PTR_SIZE: usize = size_of::<$type>();
         (0..$item_count)
             .map(|i| {
-                let range = PTR_SIZE * i..PTR_SIZE * (i + 1);
+                let range = $offset + PTR_SIZE * i..$offset + PTR_SIZE * (i + 1);
                 let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
                 Ok(transmute!(slice))
             })
             .collect::<Result<_, GraphTileError>>()
+            .map(|res| (res, $offset + PTR_SIZE * $item_count))
     }};
 }
 
@@ -48,15 +49,16 @@ macro_rules! transmute_variable_length_data {
 /// but for types implementing [`zerocopy::TryFromBytes`]
 /// rather than [`zerocopy::FromBytes`].
 macro_rules! try_transmute_variable_length_data {
-    ($type:ty, $data:expr, $item_count:expr) => {{
+    ($type:ty, $data:expr, $offset:expr, $item_count:expr) => {{
         const PTR_SIZE: usize = size_of::<$type>();
         (0..$item_count)
             .map(|i| {
-                let range = PTR_SIZE * i..PTR_SIZE * (i + 1);
+                let range = $offset + PTR_SIZE * i..$offset + PTR_SIZE * (i + 1);
                 let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
                 try_transmute!(slice).map_err(|_| GraphTileError::ValidityError)
             })
             .collect::<Result<_, GraphTileError>>()
+            .map(|res| (res, $offset + PTR_SIZE * $item_count))
     }};
 }
 
@@ -87,11 +89,11 @@ pub struct GraphTile {
     directed_edges: Vec<DirectedEdge>,
     ext_directed_edges: Vec<DirectedEdgeExt>,
     access_restrictions: Vec<AccessRestriction>,
-    // TODO: Transit departures
-    // TODO: Transit stops
-    // TODO: Transit routes
-    // TODO: Transit schedules
-    // TODO: Transit transfers
+    transit_departures: Vec<TransitDeparture>,
+    transit_stops: Vec<TransitStop>,
+    transit_routes: Vec<TransitRoute>,
+    transit_schedules: Vec<TransitSchedule>,
+    transit_transfers: Vec<TransitTransfer>,
     // TODO: Signs
     // TODO: Turn lanes
     // TODO: Admins
@@ -216,59 +218,83 @@ impl TryFrom<&[u8]> for GraphTile {
         let header_range = 0..size_of::<GraphTileHeader>();
 
         // Save the pointer to the list of nodes (the range is consumed)
-        let nodes_offset = header_range.end;
+        let offset = header_range.end;
 
         // Header
         let header_slice: [u8; size_of::<GraphTileHeader>()] = value[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
-        // TODO: Clean this repetitive mess up with a macro or something?
+        // All the variably sized data arrays
 
-        // Nodes
-        let node_count = header.node_count() as usize;
-        let nodes = transmute_variable_length_data!(NodeInfo, &value[nodes_offset..], node_count)?;
+        let (nodes, offset) =
+            transmute_variable_length_data!(NodeInfo, value, offset, header.node_count() as usize)?;
 
-        // Transitions
-        let transitions_offset = nodes_offset + (size_of::<NodeInfo>() * node_count);
-        let transition_count = header.transition_count() as usize;
-        let transitions = transmute_variable_length_data!(
+        let (transitions, offset) = transmute_variable_length_data!(
             NodeTransition,
-            &value[transitions_offset..],
-            transition_count
+            value,
+            offset,
+            header.transition_count() as usize
         )?;
 
-        // Directed edges
-        let directed_edges_offset =
-            transitions_offset + (size_of::<NodeTransition>() * transition_count);
-        let directed_edge_count = header.directed_edge_count() as usize;
-        let directed_edges = try_transmute_variable_length_data!(
+        let (directed_edges, offset) = try_transmute_variable_length_data!(
             DirectedEdge,
-            &value[directed_edges_offset..],
-            directed_edge_count
+            value,
+            offset,
+            header.directed_edge_count() as usize
         )?;
 
-        // Extended directed edges
-        let directed_edges_ext_offset =
-            directed_edges_offset + (size_of::<DirectedEdge>() * directed_edge_count);
         let directed_edge_ext_count = if header.has_ext_directed_edge() {
             header.directed_edge_count() as usize
         } else {
             0
         };
-        let ext_directed_edges = transmute_variable_length_data!(
+        let (ext_directed_edges, offset) = transmute_variable_length_data!(
             DirectedEdgeExt,
-            &value[directed_edges_ext_offset..],
+            value,
+            offset,
             directed_edge_ext_count
         )?;
 
-        // Access restrictions
-        let access_restrictions_offset =
-            directed_edges_ext_offset + (size_of::<DirectedEdgeExt>() * directed_edge_ext_count);
-        let access_restriction_count = header.access_restriction_count() as usize;
-        let access_restrictions = try_transmute_variable_length_data!(
+        let (access_restrictions, offset) = try_transmute_variable_length_data!(
             AccessRestriction,
-            &value[access_restrictions_offset..],
-            access_restriction_count
+            value,
+            offset,
+            header.access_restriction_count() as usize
+        )?;
+
+        let (transit_departures, offset) = transmute_variable_length_data!(
+            TransitDeparture,
+            value,
+            offset,
+            header.departure_count() as usize
+        )?;
+
+        let (transit_stops, offset) = transmute_variable_length_data!(
+            TransitStop,
+            value,
+            offset,
+            header.stop_count() as usize
+        )?;
+
+        let (transit_routes, offset) = transmute_variable_length_data!(
+            TransitRoute,
+            value,
+            offset,
+            header.route_count() as usize
+        )?;
+
+        let (transit_schedules, offset) = transmute_variable_length_data!(
+            TransitSchedule,
+            value,
+            offset,
+            header.schedule_count() as usize
+        )?;
+
+        let (transit_transfers, offset) = transmute_variable_length_data!(
+            TransitTransfer,
+            value,
+            offset,
+            header.transfer_count() as usize
         )?;
 
         Ok(Self {
@@ -278,6 +304,11 @@ impl TryFrom<&[u8]> for GraphTile {
             directed_edges,
             ext_directed_edges,
             access_restrictions,
+            transit_departures,
+            transit_stops,
+            transit_routes,
+            transit_schedules,
+            transit_transfers,
         })
     }
 }

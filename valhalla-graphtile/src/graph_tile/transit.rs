@@ -35,5 +35,5 @@ pub struct TransitSchedule {
 pub struct TransitTransfer {
     from_stop_id: u32,
     to_stop_id: u32,
-    _bitfield_1: u32
+    _bitfield_1: u32,
 }
