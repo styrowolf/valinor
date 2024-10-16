@@ -78,8 +78,8 @@ impl AccessRestriction {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph_tile::{AccessRestrictionType, TEST_GRAPH_TILE};
-    use crate::Access;
+    use super::{Access, AccessRestrictionType};
+    use crate::graph_tile::TEST_GRAPH_TILE;
     use enumset::EnumSet;
 
     #[test]

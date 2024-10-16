@@ -18,6 +18,7 @@ mod access_restriction;
 mod directed_edge;
 mod header;
 mod node;
+mod sign;
 mod transit;
 
 use crate::{Access, GraphId};
@@ -25,7 +26,8 @@ pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
 pub use header::GraphTileHeader;
 pub use node::{NodeInfo, NodeTransition};
-pub use transit::{TransitDeparture, TransitStop, TransitRoute, TransitSchedule, TransitTransfer};
+pub use sign::{Sign, SignType};
+pub use transit::{TransitDeparture, TransitRoute, TransitSchedule, TransitStop, TransitTransfer};
 
 /// Transmutes variable length data into a Vec<T>.
 /// This can't be written as a function because the const generics
@@ -94,7 +96,7 @@ pub struct GraphTile {
     transit_routes: Vec<TransitRoute>,
     transit_schedules: Vec<TransitSchedule>,
     transit_transfers: Vec<TransitTransfer>,
-    // TODO: Signs
+    signs: Vec<Sign>,
     // TODO: Turn lanes
     // TODO: Admins
     // TODO: Complex forward restrictions
@@ -297,6 +299,9 @@ impl TryFrom<&[u8]> for GraphTile {
             header.transfer_count() as usize
         )?;
 
+        let (signs, offset) =
+            try_transmute_variable_length_data!(Sign, value, offset, header.sign_count() as usize)?;
+
         Ok(Self {
             header,
             nodes,
@@ -309,6 +314,7 @@ impl TryFrom<&[u8]> for GraphTile {
             transit_routes,
             transit_schedules,
             transit_transfers,
+            signs,
         })
     }
 }
@@ -357,7 +363,6 @@ mod tests {
 
     #[test]
     fn test_get_get_access_restrictions() {
-        let graph_id = &*TEST_GRAPH_TILE_ID;
         let tile = &*TEST_GRAPH_TILE;
 
         let mut found_restriction_count = 0;
