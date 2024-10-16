@@ -18,8 +18,8 @@ const MAX_GRAPH_TILE_ID: u64 = (1 << 22) - 1;
 /// There are 21 bits for the index within the tile
 const MAX_TILE_INDEX: u64 = (1 << 21) - 1;
 
-/// The maximum graph ID (not to be confused with the graph tile ID).
-const MAX_GRAPH_ID: u64 = (1 << 46) - 1;
+/// All 46 bits set to 1
+const INVALID_GRAPH_ID: u64 = (1 << 46) - 1;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum InvalidGraphIdError {
@@ -30,7 +30,7 @@ pub enum InvalidGraphIdError {
     #[error("Tile index is larger than the maximum allowed value.")]
     TileIndex,
     #[error("Graph ID is invalid")]
-    GraphId,
+    InvalidGraphId,
 }
 
 /// An Identifier of a node or an edge within the tiled, hierarchical graph.
@@ -93,11 +93,19 @@ impl GraphId {
     /// This function will fail if the graph ID is obviously invalid
     /// (greater than 46 bits wide).
     pub fn try_from_id(id: u64) -> Result<Self, InvalidGraphIdError> {
-        // Simple check since we know the max bit width
-        if id > MAX_GRAPH_ID {
-            Err(InvalidGraphIdError::GraphId)
+        if id == INVALID_GRAPH_ID {
+            return Err(InvalidGraphIdError::InvalidGraphId);
+        }
+
+        let result = GraphId(id);
+        if result.level() > MAX_HIERARCHY_LEVEL {
+            Err(InvalidGraphIdError::Level)
+        } else if result.tile_id() > MAX_GRAPH_TILE_ID {
+            Err(InvalidGraphIdError::GraphTileId)
+        } else if result.index() > MAX_TILE_INDEX {
+            Err(InvalidGraphIdError::TileIndex)
         } else {
-            Ok(GraphId(id))
+            Ok(result)
         }
     }
 
@@ -262,7 +270,8 @@ mod tests {
         assert_eq!(
             graph_id,
             // Note: only 46 bits actually used
-            GraphId(MAX_GRAPH_ID)
+            // TODO: HUH??
+            GraphId(INVALID_GRAPH_ID)
         );
         assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
         assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
@@ -271,26 +280,26 @@ mod tests {
 
     #[test]
     fn test_valid_tile_by_id() {
-        let Ok(graph_id) = GraphId::try_from_id(MAX_GRAPH_ID) else {
+        // This a very strange one.... but verified from live debugging a Valhalla process...
+        let Ok(graph_id) = GraphId::try_from_id(16889572344463360) else {
             panic!("Expected that we would construct a valid graph ID.")
         };
 
         assert_eq!(
             graph_id,
-            // Note: only 46 bits actually used
-            GraphId(MAX_GRAPH_ID)
+            GraphId(16889572344463360)
         );
-        assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
-        assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
-        assert_eq!(graph_id.index(), MAX_TILE_INDEX);
+        assert_eq!(graph_id.level(), 0);
+        assert_eq!(graph_id.tile_id(), 0);
+        assert_eq!(graph_id.index(), 32000);
     }
 
     #[test]
     fn test_invalid_tile_by_id() {
         assert_eq!(
-            GraphId::try_from_id(MAX_GRAPH_ID + 1),
+            GraphId::try_from_id(INVALID_GRAPH_ID),
             // Note: only 46 bits actually used
-            Err(InvalidGraphIdError::GraphId)
+            Err(InvalidGraphIdError::InvalidGraphId)
         );
     }
 
