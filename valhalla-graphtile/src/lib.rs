@@ -7,11 +7,12 @@
 mod graph_id;
 mod graph_reader;
 pub mod graph_tile;
+pub(crate) mod macros;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 
-use std::borrow::Cow;
 use enumset::{enum_set, EnumSet, EnumSetType};
+use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,

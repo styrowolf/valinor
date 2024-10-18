@@ -1,11 +1,10 @@
 use thiserror::Error;
 use zerocopy::{transmute, try_transmute};
 
+use bytes::Bytes;
 use enumset::EnumSet;
 #[cfg(test)]
 use std::sync::LazyLock;
-#[cfg(test)]
-use zerocopy::IntoBytes;
 
 // To keep files manageable, we will keep internal modules specific to each mega-struct,
 // and publicly re-export the public type.
@@ -23,7 +22,10 @@ mod sign;
 mod transit;
 mod turn_lane;
 
-use crate::{Access, GraphId};
+use crate::{
+    graph_id::{GraphId, InvalidGraphIdError},
+    transmute_variable_length_data, try_transmute_variable_length_data, Access,
+};
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
@@ -32,42 +34,6 @@ pub use node::{NodeInfo, NodeTransition};
 pub use sign::{Sign, SignType};
 pub use transit::{TransitDeparture, TransitRoute, TransitSchedule, TransitStop, TransitTransfer};
 pub use turn_lane::TurnLane;
-use crate::graph_id::InvalidGraphIdError;
-
-/// Transmutes variable length data into a Vec<T>.
-/// This can't be written as a function because the const generics
-/// require explicit types and that context isn't available from function generic params.
-macro_rules! transmute_variable_length_data {
-    ($type:ty, $data:expr, $offset:expr, $item_count:expr) => {{
-        const PTR_SIZE: usize = size_of::<$type>();
-        (0..$item_count)
-            .map(|i| {
-                let range = $offset + PTR_SIZE * i..$offset + PTR_SIZE * (i + 1);
-                let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
-                Ok(transmute!(slice))
-            })
-            .collect::<Result<_, GraphTileError>>()
-            .map(|res| (res, $offset + PTR_SIZE * $item_count))
-    }};
-}
-
-/// Tries to transmute variable length data into a Vec<T>.
-/// Analogous to [`transmute_variable_length_data`],
-/// but for types implementing [`zerocopy::TryFromBytes`]
-/// rather than [`zerocopy::FromBytes`].
-macro_rules! try_transmute_variable_length_data {
-    ($type:ty, $data:expr, $offset:expr, $item_count:expr) => {{
-        const PTR_SIZE: usize = size_of::<$type>();
-        (0..$item_count)
-            .map(|i| {
-                let range = $offset + PTR_SIZE * i..$offset + PTR_SIZE * (i + 1);
-                let slice: [u8; PTR_SIZE] = $data[range].try_into()?;
-                try_transmute!(slice).map_err(|_| GraphTileError::ValidityError)
-            })
-            .collect::<Result<_, GraphTileError>>()
-            .map(|res| (res, $offset + PTR_SIZE * $item_count))
-    }};
-}
 
 #[derive(Debug, Error)]
 pub enum GraphTileError {
@@ -89,6 +55,7 @@ pub enum LookupError {
 
 /// A tile within the Valhalla hierarchical tile graph.
 pub struct GraphTile {
+    memory: Bytes,
     /// Header with various metadata about the tile and internal sizes.
     pub header: GraphTileHeader,
     /// The list of nodes in the graph tile.
@@ -111,7 +78,6 @@ pub struct GraphTile {
     // TODO: Complex reverse restrictions
     // TODO: Edge info (shapes are here)
     // TODO: Street names (names here)
-    // TODO: Edge bins
     // TODO: Lane connectivity
     // TODO: Predicted speeds
     // TODO: Stop one stops(?)
@@ -220,10 +186,12 @@ impl GraphTile {
     }
 }
 
-impl TryFrom<&[u8]> for GraphTile {
+// TODO: Feels like this could be a macro
+impl TryFrom<Bytes> for GraphTile {
     type Error = GraphTileError;
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(bytes: Bytes) -> Result<Self, Self::Error> {
+        let value = bytes.as_ref();
         // Get the byte range of the header so we can transmute it
         const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
         let header_range = 0..HEADER_SIZE;
@@ -331,6 +299,7 @@ impl TryFrom<&[u8]> for GraphTile {
         let edge_bins = GraphId::try_from_id(raw_graph_id)?;
 
         Ok(Self {
+            memory: bytes,
             header,
             nodes,
             transitions,
@@ -379,7 +348,9 @@ mod tests {
 
         let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count()))
             .map(|index| {
-                let edge_id = TEST_GRAPH_TILE_ID.with_index(index).expect("Invalid graph ID.");
+                let edge_id = TEST_GRAPH_TILE_ID
+                    .with_index(index)
+                    .expect("Invalid graph ID.");
                 let opp_edge_index = tile
                     .get_opp_edge_index(&edge_id)
                     .expect("Unable to get opp edge index.");

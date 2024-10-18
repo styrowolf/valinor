@@ -1,8 +1,8 @@
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
 use crate::{graph_tile::GraphTile, GraphId};
+use bytes::Bytes;
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use zerocopy::IntoBytes;
 
 pub struct DirectoryTileProvider {
     base_directory: PathBuf,
@@ -23,12 +23,12 @@ impl GraphTileProvider for DirectoryTileProvider {
         let path = self.base_directory.join(base_graph_id.file_path("gph")?);
         // Open the file and read all bytes into a buffer
         // TODO: Handle compressed tiles
-        let data = std::fs::read(path).map_err(|e| match e.kind() {
+        let data = Bytes::from(std::fs::read(path).map_err(|e| match e.kind() {
             ErrorKind::NotFound => GraphTileProviderError::TileDoesNotExist,
             _ => GraphTileProviderError::IoError(e),
-        })?;
+        })?);
         // Construct a graph tile with the bytes
-        Ok(GraphTile::try_from(data.as_bytes())?)
+        Ok(GraphTile::try_from(data)?)
     }
 }
 
