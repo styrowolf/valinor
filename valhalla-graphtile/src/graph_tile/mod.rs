@@ -351,39 +351,35 @@ impl TryFrom<&[u8]> for GraphTile {
 }
 
 #[cfg(test)]
-static TEST_GRAPH_TILE_ID: LazyLock<GraphId> =
-    LazyLock::new(|| GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID"));
+const TEST_GRAPH_TILE_ID: GraphId = unsafe { GraphId::from_components_unchecked(0, 3015, 0) };
 
 #[cfg(test)]
 static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
-    let graph_id = &*TEST_GRAPH_TILE_ID;
-    let relative_path = graph_id
+    let relative_path = TEST_GRAPH_TILE_ID
         .file_path("gph")
         .expect("Unable to get relative path");
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("fixtures")
         .join("andorra-tiles")
         .join(relative_path);
-    let bytes = std::fs::read(path).expect("Unable to read file");
+    let bytes = Bytes::from(std::fs::read(path).expect("Unable to read file"));
 
-    GraphTile::try_from(bytes.as_bytes()).expect("Unable to get tile")
+    GraphTile::try_from(bytes).expect("Unable to get tile")
 });
 
 #[cfg(test)]
 mod tests {
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
-    use crate::{Access, GraphId};
+    use crate::Access;
     use enumset::{enum_set, EnumSet};
-    use crate::graph_id::InvalidGraphIdError::InvalidGraphId;
 
     #[test]
     fn test_get_opp_edge_index() {
-        let graph_id = &*TEST_GRAPH_TILE_ID;
         let tile = &*TEST_GRAPH_TILE;
 
         let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count()))
             .map(|index| {
-                let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
+                let edge_id = TEST_GRAPH_TILE_ID.with_index(index).expect("Invalid graph ID.");
                 let opp_edge_index = tile
                     .get_opp_edge_index(&edge_id)
                     .expect("Unable to get opp edge index.");

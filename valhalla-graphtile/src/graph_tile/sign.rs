@@ -39,6 +39,7 @@ struct SignBitField {
 }
 
 #[derive(TryFromBytes)]
+#[repr(C)]
 pub struct Sign {
     bitfield: SignBitField,
     /// The offset into the [`GraphTile`](super::GraphTile) text list
@@ -75,13 +76,13 @@ impl Sign {
     /// This description copied straight from Valhalla.
     /// The description and naming have room for improvement.
     #[inline]
-    pub fn is_route_num_type(&self) -> bool {
+    pub const fn is_route_num_type(&self) -> bool {
         self.bitfield.is_route_num_type() != 0
     }
 
     /// Is the sign text tagged?
     #[inline]
-    pub fn is_text_tagged(&self) -> bool {
+    pub const fn is_text_tagged(&self) -> bool {
         self.bitfield.is_text_tagged() != 0
     }
 }

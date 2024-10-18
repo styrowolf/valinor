@@ -12,7 +12,7 @@ DirectedEdge {
         country_crossing: 0,
     },
     second_bitfield: SecondBitfield {
-        edgeinfo_offset: 90916,
+        edge_info_offset: 90916,
         access_restrictions: 0,
         start_restriction: 0,
         end_restriction: 0,

@@ -1,8 +1,9 @@
+use crate::AsCowStr;
 use std::borrow::Cow;
 use zerocopy_derive::FromBytes;
-use crate::AsCowStr;
 
 #[derive(FromBytes, Debug)]
+#[repr(C)]
 pub struct Admin {
     /// The offset into the [`GraphTile`](super::GraphTile) text list for the country name.
     pub country_name_offset: u32,
@@ -33,10 +34,7 @@ mod tests {
     fn test_parse_admin_count() {
         let tile = &*TEST_GRAPH_TILE;
 
-        assert_eq!(
-            tile.admins.len(),
-            tile.header.admin_count() as usize
-        );
+        assert_eq!(tile.admins.len(), tile.header.admin_count() as usize);
     }
 
     #[test]
@@ -44,9 +42,15 @@ mod tests {
         let tile = &*TEST_GRAPH_TILE;
 
         insta::assert_debug_snapshot!(tile.admins);
-        insta::assert_debug_snapshot!(tile.admins.iter().map(|admin| admin.country_iso()).collect::<Vec<_>>());
-        insta::assert_debug_snapshot!(tile.admins.iter().map(|admin| admin.principal_subdivision_iso()).collect::<Vec<_>>());
+        insta::assert_debug_snapshot!(tile
+            .admins
+            .iter()
+            .map(|admin| admin.country_iso())
+            .collect::<Vec<_>>());
+        insta::assert_debug_snapshot!(tile
+            .admins
+            .iter()
+            .map(|admin| admin.principal_subdivision_iso())
+            .collect::<Vec<_>>());
     }
 }
-
-

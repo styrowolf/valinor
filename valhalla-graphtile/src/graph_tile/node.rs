@@ -87,8 +87,8 @@ struct ThirdBitfield {
 /// The graph uses a forward star structure,
 /// where nodes point to the first outbound directed edge,
 /// and each directed edge points to the other end node of the edge.
-#[repr(C)]
 #[derive(FromBytes, Debug)]
+#[repr(C)]
 pub struct NodeInfo {
     first_bit_field: FirstBitfield,
     second_bit_field: SecondBitfield,
@@ -122,7 +122,7 @@ pub struct NodeTransition {
 impl NodeTransition {
     /// The ID of the corresponding end node on another hierarchy level.
     #[inline]
-    pub fn corresponding_end_node_id(&self) -> GraphId {
+    pub const fn corresponding_end_node_id(&self) -> GraphId {
         // Safety: We know that this value cannot be larger than 46 bits.
         unsafe { GraphId::from_id_unchecked(self.end_node_id()) }
     }

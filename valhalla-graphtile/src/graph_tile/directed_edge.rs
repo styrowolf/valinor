@@ -28,7 +28,7 @@ struct FirstBitfield {
 #[bitfield(u64)]
 struct SecondBitfield {
     #[bits(25)]
-    edgeinfo_offset: u32,
+    edge_info_offset: u32,
     #[bits(12)]
     access_restrictions: u16,
     #[bits(12)]
@@ -234,7 +234,7 @@ impl DirectedEdge {
 
     /// Is this a transit line (buss or rail)?
     #[inline]
-    pub fn end_node_id(&self) -> GraphId {
+    pub const fn end_node_id(&self) -> GraphId {
         // Safety: We know the number of bits is limited
         unsafe { GraphId::from_id_unchecked(self.first_bitfield.end_node()) }
     }
@@ -270,14 +270,20 @@ impl DirectedEdge {
     ///
     /// Can be used to find the start node of this directed edge.
     #[inline]
-    pub fn opposing_edge_index(&self) -> u32 {
+    pub const fn opposing_edge_index(&self) -> u32 {
         self.first_bitfield.opposing_edge_index()
     }
 
     /// Is this edge a shortcut?
     #[inline]
-    pub fn is_shortcut(&self) -> bool {
+    pub const fn is_shortcut(&self) -> bool {
         self.seventh_bitfield.is_shortcut() != 0
+    }
+
+    /// Gets the offset into the variable sized edge info field.
+    #[inline]
+    pub const fn edge_info_offset(&self) -> u32 {
+        self.second_bitfield.edge_info_offset()
     }
 }
 

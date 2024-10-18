@@ -11,6 +11,7 @@ struct EdgeIndex {
 }
 
 #[derive(FromBytes, Debug)]
+#[repr(C)]
 pub struct TurnLane {
     edge_index: EdgeIndex,
     /// The offset into the [`GraphTile`](super::GraphTile) text list
@@ -25,7 +26,7 @@ pub struct TurnLane {
 impl TurnLane {
     /// Gets the index (within the same tile) of the directed edge that this sign applies to.
     #[inline]
-    pub fn directed_edge_index(&self) -> u32 {
+    pub const fn directed_edge_index(&self) -> u32 {
         self.edge_index.edge_index()
     }
 }

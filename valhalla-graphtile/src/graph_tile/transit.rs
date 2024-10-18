@@ -3,6 +3,7 @@
 use zerocopy_derive::FromBytes;
 
 #[derive(Debug, FromBytes)]
+#[repr(C)]
 pub struct TransitDeparture {
     _bitfield1: u64,
     _bitfield2: u64,
@@ -10,11 +11,13 @@ pub struct TransitDeparture {
 }
 
 #[derive(FromBytes)]
+#[repr(C)]
 pub struct TransitStop {
     _data: u64,
 }
 
 #[derive(FromBytes)]
+#[repr(C)]
 pub struct TransitRoute {
     _route_color: u32,
     _route_text_color: u32,
@@ -26,12 +29,14 @@ pub struct TransitRoute {
 }
 
 #[derive(FromBytes)]
+#[repr(C)]
 pub struct TransitSchedule {
     _days: u64,
     _bitfield1: u64,
 }
 
 #[derive(FromBytes)]
+#[repr(C)]
 pub struct TransitTransfer {
     from_stop_id: u32,
     to_stop_id: u32,

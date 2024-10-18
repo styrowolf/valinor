@@ -70,7 +70,7 @@ impl GraphId {
     /// - `tile_id` - 22 bits
     /// - `index` - 21 bits
     #[inline]
-    pub fn try_from_components(
+    pub const fn try_from_components(
         level: u8,
         tile_id: u64,
         index: u64,
@@ -82,17 +82,26 @@ impl GraphId {
         } else if index > MAX_TILE_INDEX {
             Err(InvalidGraphIdError::TileIndex)
         } else {
-            Ok(Self(u64::from(level) | (tile_id << 3) | index << 25))
+            Ok(Self(level as u64 | (tile_id << 3) | index << 25))
         }
+    }
+
+    /// Creates a graph ID from the given components without performing any validity checks.
+    ///
+    /// # Safety
+    ///
+    /// Invalid values risk things like out-of-bounds level indexes,
+    /// which could cause crashes or other unexpected behavior.
+    pub const unsafe fn from_components_unchecked(level: u8, tile_id: u64, index: u64) -> Self {
+        Self(level as u64 | (tile_id << 3) | index << 25)
     }
 
     /// Creates a graph ID from the given raw value.
     ///
     /// # Errors
     ///
-    /// This function will fail if the graph ID is obviously invalid
-    /// (greater than 46 bits wide).
-    pub fn try_from_id(id: u64) -> Result<Self, InvalidGraphIdError> {
+    /// This function will fail if the graph ID fails to conform to the invariants.
+    pub const fn try_from_id(id: u64) -> Result<Self, InvalidGraphIdError> {
         if id == INVALID_GRAPH_ID {
             return Err(InvalidGraphIdError::InvalidGraphId);
         }
@@ -109,15 +118,13 @@ impl GraphId {
         }
     }
 
-    /// Creates a graph ID from the given raw value without doing any validity checks.
+    /// Creates a graph ID from the given raw value without performing any validity checks.
     ///
     /// # Safety
     ///
-    /// If you know that the value cannot possibly be larger than 46 bits,
-    /// this is safe.
-    /// Otherwise, you may risk things like invalid level indexes,
-    /// which could cause unexpected behavior elsewhere.
-    pub unsafe fn from_id_unchecked(id: u64) -> Self {
+    /// Invalid values risk things like out-of-bounds level indexes,
+    /// which could cause crashes or other unexpected behavior.
+    pub const unsafe fn from_id_unchecked(id: u64) -> Self {
         Self(id)
     }
 
@@ -128,7 +135,7 @@ impl GraphId {
     ///
     /// See [`GraphId::try_from_components`] for a description of errors.
     #[inline]
-    pub fn with_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
+    pub const fn with_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
         Self::try_from_components(self.level(), self.tile_id(), tile_index)
     }
 
@@ -285,10 +292,7 @@ mod tests {
             panic!("Expected that we would construct a valid graph ID.")
         };
 
-        assert_eq!(
-            graph_id,
-            GraphId(16889572344463360)
-        );
+        assert_eq!(graph_id, GraphId(16889572344463360));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
         assert_eq!(graph_id.index(), 32000);

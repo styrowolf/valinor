@@ -155,7 +155,7 @@ pub struct GraphTileHeader {
 impl GraphTileHeader {
     /// The full Graph ID of this tile.
     #[inline]
-    pub fn graph_id(&self) -> GraphId {
+    pub const fn graph_id(&self) -> GraphId {
         // Safety: We know that the bit field cannot contain a value
         // larger than the max allowed value.
         unsafe { GraphId::from_id_unchecked(self.bit_field_1.graph_id()) }
@@ -209,79 +209,79 @@ impl GraphTileHeader {
     }
 
     #[inline]
-    pub fn node_count(&self) -> u32 {
+    pub const fn node_count(&self) -> u32 {
         self.bit_field_2.node_count()
     }
 
     /// The number of directed edges in this graph tile.
     #[inline]
-    pub fn directed_edge_count(&self) -> u32 {
+    pub const fn directed_edge_count(&self) -> u32 {
         self.bit_field_2.directed_edge_count()
     }
 
     /// The number of predicted speed records in this graph tile.
     #[inline]
-    pub fn predicted_speeds_count(&self) -> u32 {
+    pub const fn predicted_speeds_count(&self) -> u32 {
         self.bit_field_2.predicted_speeds_count()
     }
 
     /// The number of node transitions in this graph tile.
     #[inline]
-    pub fn transition_count(&self) -> u32 {
+    pub const fn transition_count(&self) -> u32 {
         self.transition_count_bitfield.transition_count()
     }
 
     /// The number of turn lanes in this graph tile.
     #[inline]
-    pub fn turn_lane_count(&self) -> u32 {
+    pub const fn turn_lane_count(&self) -> u32 {
         self.turn_lane_count_bitfield.turn_lane_count()
     }
 
     /// The number of transit transfers in this graph tile.
     #[inline]
-    pub fn transfer_count(&self) -> u32 {
+    pub const fn transfer_count(&self) -> u32 {
         self.transit_record_bitfield.transfer_count()
     }
 
     /// The number of transit departures in this graph tile.
     #[inline]
-    pub fn departure_count(&self) -> u32 {
+    pub const fn departure_count(&self) -> u32 {
         self.transit_record_bitfield.departure_count()
     }
 
     /// The number of transit stops in this graph tile.
     #[inline]
-    pub fn stop_count(&self) -> u16 {
+    pub const fn stop_count(&self) -> u16 {
         self.transit_record_bitfield.stop_count()
     }
 
     /// The number of transit routes in this graph tile.
     #[inline]
-    pub fn route_count(&self) -> u16 {
+    pub const fn route_count(&self) -> u16 {
         self.misc_counts_bit_field_one.route_count()
     }
 
     /// The number of transit schedules in this graph tile.
     #[inline]
-    pub fn schedule_count(&self) -> u16 {
+    pub const fn schedule_count(&self) -> u16 {
         self.misc_counts_bit_field_one.schedule_count()
     }
 
     /// The number of signs in this graph tile.
     #[inline]
-    pub fn sign_count(&self) -> u32 {
+    pub const fn sign_count(&self) -> u32 {
         self.misc_counts_bit_field_one.sign_count()
     }
 
     /// The number of access restrictions in this graph tile.
     #[inline]
-    pub fn access_restriction_count(&self) -> u32 {
+    pub const fn access_restriction_count(&self) -> u32 {
         self.misc_counts_bit_field_two.access_restriction_count()
     }
 
     /// The number of admin records in this graph tile.
     #[inline]
-    pub fn admin_count(&self) -> u16 {
+    pub const fn admin_count(&self) -> u16 {
         self.misc_counts_bit_field_two.admin_count()
     }
 }
