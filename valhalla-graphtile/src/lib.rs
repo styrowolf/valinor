@@ -8,6 +8,7 @@ mod graph_id;
 mod graph_reader;
 pub mod graph_tile;
 pub(crate) mod macros;
+pub mod shape_codec;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 

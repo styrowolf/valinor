@@ -129,6 +129,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "428d9aa8fbc0670b7b8d6030a7fadd0f86151cae55e4dbbece15f3780a3dfaf3"
 
 [[package]]
+name = "bytes-varint"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54c1820c7c366b9d26c47143e1604454105a59969aade54e4f695d96acc8332f"
+dependencies = [
+ "bytes",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -475,6 +484,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
 
 [[package]]
+name = "polyline"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f19cbf429afe5a5186d4c6ca7b246b446b2d18919eefdddb521792d57c874f67"
+dependencies = [
+ "geo-types",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -665,9 +683,11 @@ version = "0.1.0"
 dependencies = [
  "bitfield-struct",
  "bytes",
+ "bytes-varint",
  "enumset",
  "geo",
  "insta",
+ "polyline",
  "rand",
  "thiserror",
  "zerocopy 0.8.5",

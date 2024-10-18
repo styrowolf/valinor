@@ -16,6 +16,7 @@ use std::sync::LazyLock;
 mod access_restriction;
 mod admin;
 mod directed_edge;
+mod edge_info;
 mod header;
 mod node;
 mod sign;
@@ -29,6 +30,7 @@ use crate::{
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
+pub use edge_info::EdgeInfo;
 pub use header::GraphTileHeader;
 pub use node::{NodeInfo, NodeTransition};
 pub use sign::{Sign, SignType};
@@ -183,6 +185,13 @@ impl GraphTile {
             .take_while(|e| e.edge_index() == directed_edge_index)
             .filter(|e| !e.affected_access_modes().is_disjoint(access_modes))
             .collect()
+    }
+
+    /// Gets edge info for a directed edge.
+    pub fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo, GraphTileError> {
+        let start = self.header.edge_info_offset as usize;
+        let size = directed_edge.edge_info_offset() as usize;
+        Ok(EdgeInfo::try_from(self.memory.slice(start + size..))?)
     }
 }
 
@@ -341,6 +350,7 @@ mod tests {
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
     use crate::Access;
     use enumset::{enum_set, EnumSet};
+    use geo::CoordsIter;
 
     #[test]
     fn test_get_opp_edge_index() {
@@ -405,7 +415,23 @@ mod tests {
         // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
         let tile = &*TEST_GRAPH_TILE;
         assert_eq!(tile.edge_bins.level(), 0);
-        assert_eq!(tile.edge_bins.tile_id() , 0);
-        assert_eq!(tile.edge_bins.index() , 32000);
+        assert_eq!(tile.edge_bins.tile_id(), 0);
+        assert_eq!(tile.edge_bins.index(), 32000);
+    }
+
+    #[test]
+    fn test_edge_info() {
+        let tile = &*TEST_GRAPH_TILE;
+        let first_edge_info = tile
+            .get_edge_info(&tile.directed_edges[0])
+            .expect("Unable to get edge info.");
+        insta::assert_debug_snapshot!(first_edge_info);
+
+        insta::assert_debug_snapshot!(first_edge_info.shape());
+
+        let last_edge_info = tile
+            .get_edge_info(&tile.directed_edges.last().unwrap())
+            .expect("Unable to get edge info.");
+        insta::assert_debug_snapshot!(last_edge_info);
     }
 }

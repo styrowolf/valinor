@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
     "valhalla-graphtile",
-    "valinor-export-edges"
+    "valinor-export-edges",
 ]
 
 [workspace.dependencies]
@@ -13,6 +13,7 @@ bytes = "1.7.2"
 geo = "0.28.0"
 indicatif = "0.17.8"
 insta = { version = "1.40.0", features = ["yaml"] }
+polyline = "0.11.0"
 rand = "0.8.5"
 thiserror = "1.0.64"
 zerocopy = "0.8.5"
