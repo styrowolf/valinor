@@ -1,4 +1,3 @@
-use std::cell::OnceCell;
 use crate::{
     graph_tile::GraphTileError, shape_codec::decode_shape, transmute_variable_length_data,
 };
@@ -6,6 +5,7 @@ use bitfield_struct::bitfield;
 use bytes::Bytes;
 use bytes_varint::VarIntError;
 use geo::LineString;
+use std::cell::OnceCell;
 use zerocopy::transmute;
 use zerocopy_derive::FromBytes;
 
@@ -71,7 +71,7 @@ pub struct EdgeInfo {
     name_info_list: Vec<NameInfo>,
     /// The raw varint-encoded shape bytes.
     pub encoded_shape: Bytes,
-    decoded_shape: OnceCell<LineString<f64>>
+    decoded_shape: OnceCell<LineString<f64>>,
     // TODO: Final 2 bytes of a 64-bit way ID
     // TODO: Encoded elevation (pointer?)
     // TODO: name list (pointer?)

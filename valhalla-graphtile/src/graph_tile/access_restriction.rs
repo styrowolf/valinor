@@ -1,9 +1,7 @@
-use crate::graph_tile::GraphTileError;
 use crate::Access;
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use zerocopy::try_transmute;
-use zerocopy_derive::{FromBytes, TryFromBytes};
+use zerocopy_derive::TryFromBytes;
 
 /// Types of access restrictions.
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
@@ -23,13 +21,35 @@ pub enum AccessRestrictionType {
     // but the field looks 6 bits wide to me, not 5.
 }
 
+impl AccessRestrictionType {
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
+    const fn from_bits(value: u8) -> Self {
+        // FIXME: This is hackish
+        match value {
+            0 => AccessRestrictionType::Hazmat,
+            1 => AccessRestrictionType::MaxHeight,
+            2 => AccessRestrictionType::MaxWidth,
+            3 => AccessRestrictionType::MaxLength,
+            4 => AccessRestrictionType::MaxWeight,
+            5 => AccessRestrictionType::MaxAxleLoad,
+            6 => AccessRestrictionType::TimedAllowed,
+            7 => AccessRestrictionType::TimedDenied,
+            8 => AccessRestrictionType::DestinationAllowed,
+            9 => AccessRestrictionType::MaxAxles,
+            _ => panic!("As far as I can tell, this crate doesn't support failable ops."),
+        }
+    }
+}
+
 #[bitfield(u64)]
-#[derive(PartialEq, Eq, FromBytes)]
+#[derive(PartialEq, Eq, TryFromBytes)]
 struct AccessRestrictionBitField {
     #[bits(22)]
     edge_index: u32,
     #[bits(6)]
-    restriction_type: u8,
+    restriction_type: AccessRestrictionType,
     #[bits(12)]
     modes: u16,
     #[bits(24)]
@@ -52,19 +72,9 @@ impl AccessRestriction {
     }
 
     /// Gets the type of access restriction.
-    ///
-    /// # Panics
-    ///
-    /// This function currently panics if the edge use contains an invalid bit pattern.
-    /// We should check the validity of the field when we do the initial try_transmute
-    /// on the type (and then have an error result that the tile is invalid).
-    /// There are some upstream bugs though between zerocopy and bitfield-struct
-    /// macros: https://github.com/google/zerocopy/issues/388.
     #[inline]
     pub fn restriction_type(&self) -> AccessRestrictionType {
-        try_transmute!(self.bitfield.restriction_type())
-            .map_err(|_| GraphTileError::ValidityError)
-            .expect("Invalid bit pattern for restriction type.")
+        self.bitfield.restriction_type()
     }
 
     /// The access modes affected by this restriction.

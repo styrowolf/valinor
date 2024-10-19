@@ -122,6 +122,53 @@ pub enum RoadUse {
     // WARNING: This is a 6-bit field, so never add a value higher than 63!
 }
 
+impl RoadUse {
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
+    const fn from_bits(value: u8) -> Self {
+        // FIXME: This is hackish
+        match value {
+            0 => RoadUse::Road,
+            1 => RoadUse::Ramp,
+            2 => RoadUse::TurnChannel,
+            3 => RoadUse::Track,
+            4 => RoadUse::Driveway,
+            5 => RoadUse::Alley,
+            6 => RoadUse::ParkingAisle,
+            7 => RoadUse::EmergencyAccess,
+            8 => RoadUse::DriveThru,
+            9 => RoadUse::CulDeSac,
+            10 => RoadUse::LivingStreet,
+            11 => RoadUse::ServiceRoad,
+            20 => RoadUse::Cycleway,
+            21 => RoadUse::MountainBike,
+            24 => RoadUse::Sidewalk,
+            25 => RoadUse::Footway,
+            26 => RoadUse::Steps,
+            27 => RoadUse::Path,
+            28 => RoadUse::Pedestrian,
+            29 => RoadUse::Bridleway,
+            32 => RoadUse::PedestrianCrossing,
+            33 => RoadUse::Elevator,
+            34 => RoadUse::Escalator,
+            35 => RoadUse::Platform,
+            30 => RoadUse::RestArea,
+            31 => RoadUse::ServiceArea,
+            40 => RoadUse::Other,
+            41 => RoadUse::Ferry,
+            42 => RoadUse::RailFerry,
+            43 => RoadUse::Construction,
+            50 => RoadUse::Rail,
+            51 => RoadUse::Bus,
+            52 => RoadUse::EgressConnection,
+            53 => RoadUse::PlatformConnection,
+            54 => RoadUse::TransitConnection,
+            _ => panic!("As far as I can tell, this crate doesn't support failable ops."),
+        }
+    }
+}
+
 /// Access permission by travel type.
 ///
 /// This is stored internally as a bit field.

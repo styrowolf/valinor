@@ -26,7 +26,7 @@ DirectedEdge {
         constrained_flow_speedspeed: 0,
         truck_speed: 0,
         name_consistency: 3,
-        edge_use: 0,
+        edge_use: Road,
         lane_count: 1,
         density: 1,
         classification: 2,

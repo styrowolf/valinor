@@ -1,8 +1,6 @@
-use crate::graph_tile::GraphTileError;
 use crate::{GraphId, RoadUse};
 use bitfield_struct::bitfield;
 use std::fmt::{Debug, Formatter};
-use zerocopy::try_transmute;
 use zerocopy_derive::{FromBytes, Immutable, TryFromBytes};
 
 #[derive(FromBytes)]
@@ -45,8 +43,8 @@ struct SecondBitfield {
     not_thru: u8,
 }
 
-#[derive(FromBytes)]
 #[bitfield(u64)]
+#[derive(TryFromBytes)]
 struct ThirdBitfield {
     #[bits(8)]
     speed: u8,
@@ -59,7 +57,7 @@ struct ThirdBitfield {
     #[bits(8)]
     name_consistency: u8,
     #[bits(6)]
-    edge_use: u8,
+    edge_use: RoadUse,
     #[bits(4)]
     lane_count: u8,
     #[bits(4)]
@@ -240,19 +238,9 @@ impl DirectedEdge {
     }
 
     /// The way the edge is used.
-    ///
-    /// # Panics
-    ///
-    /// This function currently panics if the edge use contains an invalid bit pattern.
-    /// We should check the validity of the field when we do the initial try_transmute
-    /// on the type (and then have an error result that the tile is invalid).
-    /// There are some upstream bugs though between zerocopy and bitfield-struct
-    /// macros: https://github.com/google/zerocopy/issues/388.
     #[inline]
     pub fn edge_use(&self) -> RoadUse {
-        try_transmute!(self.third_bitfield.edge_use())
-            .map_err(|_| GraphTileError::ValidityError)
-            .expect("Invalid bit pattern for edge use.")
+        self.third_bitfield.edge_use()
     }
 
     /// Is this a transit line (buss or rail)?
