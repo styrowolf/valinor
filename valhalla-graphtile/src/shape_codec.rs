@@ -20,8 +20,8 @@ pub fn decode_shape(bytes: Bytes) -> Result<LineString<f64>, VarIntError> {
     let mut lat = 0;
     let mut lon = 0;
     while !bytes.is_empty() {
-        lat += bytes.get_i32_varint()?;
-        lon += bytes.get_i32_varint()?;
+        lat += bytes.try_get_i32_varint()?;
+        lon += bytes.try_get_i32_varint()?;
         coords.push(coord! {
             x: f64::from(lon) * DECODE_PRECISION,
             y: f64::from(lat) * DECODE_PRECISION,
