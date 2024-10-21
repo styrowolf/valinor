@@ -3,6 +3,9 @@ name = "valhalla-graphtile"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+serde = ["dep:serde_derive", "dep:serde"]
+
 [dependencies]
 thiserror = { workspace = true }
 geo = { workspace = true }
@@ -10,6 +13,8 @@ bitfield-struct = "0.9.0"
 bytes = { workspace = true }
 bytes-varint = "1.0.3"
 enumset = "1.1.5"
+serde = { workspace = true, optional = true }
+serde_derive = { workspace = true, optional = true }
 polyline = { workspace = true }
 zerocopy = { workspace = true }
 zerocopy-derive = { workspace = true }

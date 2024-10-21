@@ -15,6 +15,10 @@ pub mod tile_provider;
 use enumset::{enum_set, EnumSet, EnumSetType};
 use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
+
+#[cfg(feature = "serde")]
+use serde_derive::{Deserialize, Serialize};
+
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,
 // But many of those only have one or two useful definitions to re-export,
@@ -42,6 +46,7 @@ pub enum RoadClass {
 
 /// Sub-categorization of roads based on specialized usage.
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[repr(u8)]
 pub enum RoadUse {
     // General road-oriented tags

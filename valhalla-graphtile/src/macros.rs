@@ -1,3 +1,5 @@
+// TODO: Revisit this approach. Feels like this is very wrong and doing a lot of copying.
+
 /// Transmutes variable length data into a Vec<T>.
 /// This can't be written as a function because the const generics
 /// require explicit types and that context isn't available from function generic params.

@@ -86,6 +86,12 @@ pub struct EdgeInfo {
 }
 
 impl EdgeInfo {
+    /// Gets the tagged speed limit along this edge (in kph).
+    #[inline]
+    pub const fn speed_limit(&self) -> u8 {
+        self.inner.first_inner_bitfield.speed_limit()
+    }
+
     /// Gets the shape of the edge geometry as a LineString.
     ///
     /// # Performance

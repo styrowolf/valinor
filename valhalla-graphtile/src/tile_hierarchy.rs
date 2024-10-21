@@ -40,6 +40,16 @@ impl TilingSystem {
     pub const fn tile_count(&self) -> u32 {
         self.n_rows * self.n_cols
     }
+
+    pub const fn min_zoom(&self) -> u32 {
+        if self.tile_size > 1.0 {
+            0
+        } else if self.tile_size > 0.25 {
+            4
+        } else {
+            11
+        }
+    }
 }
 
 /// A level in the Valhalla tile hierarchy.

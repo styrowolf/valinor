@@ -1,5 +1,6 @@
-use crate::{GraphId, RoadUse};
+use crate::{Access, GraphId, RoadUse};
 use bitfield_struct::bitfield;
+use enumset::EnumSet;
 use std::fmt::{Debug, Formatter};
 use zerocopy_derive::{FromBytes, Immutable, TryFromBytes};
 
@@ -272,6 +273,32 @@ impl DirectedEdge {
     #[inline]
     pub const fn edge_info_offset(&self) -> u32 {
         self.second_bitfield.edge_info_offset()
+    }
+
+    /// Is the edge info forward or reverse?
+    ///
+    /// TODO: Determine the practical implications of this
+    #[inline]
+    pub const fn forward(&self) -> bool {
+        self.first_bitfield.forward() != 0
+    }
+
+    /// Gets the forward access modes.
+    ///
+    /// TODO: Determine the impact of [`self.forward`] on this
+    #[inline]
+    pub fn forward_access(&self) -> EnumSet<Access> {
+        // Safety: The access bits are length 12, so invalid representations are impossible.
+        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.forward_access()) }
+    }
+
+    /// Gets the reverse access modes.
+    ///
+    /// TODO: Determine the impact of `forward` on this
+    #[inline]
+    pub fn reverse_access(&self) -> EnumSet<Access> {
+        // Safety: The access bits are length 12, so invalid representations are impossible.
+        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access()) }
     }
 }
 
