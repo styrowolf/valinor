@@ -1,10 +1,11 @@
 use crate::{
-    graph_tile::GraphTileError, shape_codec::decode_shape, transmute_variable_length_data,
+    graph_tile::GraphTileError, shape_codec::decode_shape, transmute_variable_length_data, AsCowStr,
 };
 use bitfield_struct::bitfield;
 use bytes::Bytes;
 use bytes_varint::VarIntError;
 use geo::LineString;
+use std::borrow::Cow;
 use std::cell::OnceCell;
 use zerocopy::transmute;
 use zerocopy_derive::FromBytes;
@@ -14,10 +15,16 @@ use zerocopy_derive::FromBytes;
 pub struct NameInfo {
     #[bits(24)]
     name_offset: u32,
+    /// Additional fields following the name.
+    ///
+    /// These can be used for additional information like phonetic readings.
     #[bits(4)]
     additional_fields: u8,
     #[bits(1)]
     is_route_num: u8,
+    /// Indicates the string is specially tagged (ex: uses the first char as the tag type).
+    ///
+    /// This doesn't have any relation to OSM tagging.
     #[bits(1)]
     is_tagged: u8,
     #[bits(2)]
@@ -74,8 +81,7 @@ pub struct EdgeInfo {
     decoded_shape: OnceCell<LineString<f64>>,
     // TODO: Final 2 bytes of a 64-bit way ID
     // TODO: Encoded elevation (pointer?)
-    // TODO: name list (pointer?)
-    // TODO: name list length (oh shit that's a size_t...)
+    text_list_memory: Bytes,
     // TODO: Tag cache
 }
 
@@ -98,13 +104,36 @@ impl EdgeInfo {
             }
         }
     }
+
+    // TODO: Other filters (tagged and linguistic filters)
+    /// Gets all names for this edge.
+    ///
+    /// # Performance
+    ///
+    /// This is mostly just pointer indirection and some light filtering.
+    /// Not great to call in a hot loop, but also not doing a lot of heavy processing.
+    /// The main thing to be careful of in hot paths is allocations.
+    pub fn get_names(&self) -> Vec<Cow<'_, str>> {
+        self.name_info_list
+            .iter()
+            .filter_map(|ni| {
+                // FIXME: Methods
+                // No, this is not a bug...
+                if ni.is_tagged() == 0 {
+                    Some(self.text_list_memory[ni.name_offset() as usize..].as_cow_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 // TODO: Feels like this could be a macro
-impl TryFrom<Bytes> for EdgeInfo {
+impl TryFrom<(Bytes, Bytes)> for EdgeInfo {
     type Error = GraphTileError;
 
-    fn try_from(bytes: Bytes) -> Result<Self, Self::Error> {
+    fn try_from((bytes, text_list_memory): (Bytes, Bytes)) -> Result<Self, Self::Error> {
         let value = &bytes;
         const INNER_SIZE: usize = size_of::<EdgeInfoInner>();
         let inner_slice: [u8; INNER_SIZE] = (&value[0..INNER_SIZE]).try_into()?;
@@ -125,6 +154,7 @@ impl TryFrom<Bytes> for EdgeInfo {
             name_info_list,
             encoded_shape,
             decoded_shape: OnceCell::new(),
+            text_list_memory,
         })
     }
 }

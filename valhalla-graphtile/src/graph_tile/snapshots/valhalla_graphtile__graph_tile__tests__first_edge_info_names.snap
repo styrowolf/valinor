@@ -1,0 +1,5 @@
+---
+source: valhalla-graphtile/src/graph_tile/mod.rs
+expression: first_edge_info.get_names()
+---
+[]

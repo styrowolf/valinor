@@ -1,0 +1,47 @@
+---
+source: valhalla-graphtile/src/graph_tile/mod.rs
+expression: other_edge_info
+---
+EdgeInfo {
+    inner: EdgeInfoInner {
+        way_id: 28833880,
+        first_inner_bitfield: FirstInnerBitfield {
+            mean_elevation: 0,
+            bike_network: 0,
+            speed_limit: 90,
+            extended_way_id: 0,
+        },
+        second_inner_bitfield: SecondInnerBitfield {
+            name_count: 3,
+            encoded_shape_size: 87,
+            extended_way_id: 0,
+            extended_way_id_size: 0,
+            has_elevation: 0,
+        },
+    },
+    name_info_list: [
+        NameInfo {
+            name_offset: 710,
+            additional_fields: 0,
+            is_route_num: 0,
+            is_tagged: 0,
+        },
+        NameInfo {
+            name_offset: 458,
+            additional_fields: 0,
+            is_route_num: 1,
+            is_tagged: 0,
+        },
+        NameInfo {
+            name_offset: 42,
+            additional_fields: 0,
+            is_route_num: 0,
+            is_tagged: 1,
+        },
+    ],
+    encoded_shape: b"\x9c\xa4\xc9(\xe2\xf6\xd2\x01\xdd\x02\x13\xaf\x053\x93\x06U\x9d\x06{\xfb\x01=\xcd\x02g\x87\n\x8d\x04\x9b\x01)\xe5\x01+\xf1\x02\x1b\x8b\x03\x07\x81\x02\x1a\x8f\x01 w6\xbd\x06\xa2\x04o@}4\xbb\x01&\xcd\x02\x02\xd1\x02E\x99\x05\xd1\x02\xa7\x07\x93\x04\xc3\x06\xb3\x03\x87\x02\xd1\x01\x99\x02\x8d\x02",
+    decoded_shape: OnceCell(
+        <uninit>,
+    ),
+    text_list_memory: b"\0None\0Andorra\0CG-1\0\x02\t\0\x05\0Avinguda de Salou\0\x02\t\0\x05\t\0\r\0Rotonda de les Costes\0Espa\xc3\xb1a\0Catalunya\0N-145\0Rotonda de la Juberrussa\0Carrer Francesc Carat\0\x01\x01\0rotonda\0carretera General 1\0CG-6\0T\xc3\xbanel de la T\xc3\xa0pia\0\x01\xff\0\x02\t\0\r\t\0\x15\0\x01\x02\0Pont de Madrid\0CG-4\0Avinguda del Ravell\0Carretera d'Erts\0CG-5\0Carretera d'Arinsal\0Carretera General 3\0CG-3\0Rotonda de Casadet\0Avinguda de Tarragona\0Rotonda de la Comella\0Rotonda els Marginets\0Vial de la Uni\xc3\xb2\0Rotonda Josep Escaler\0Rotonda Km. 0\0CG-2\0Vial de la Uni\xc3\xb3\0Rotonda del Gall\0Carrer del Valira\0T\xc3\xbanel del Pont Pla\0CG-3a\0T\xc3\xbanel de les dos Valires\0Avinguda Coprincep \xc3\x89piscopal\0Pont de Sant Antoni\0T\xc3\xbanel de Sant Antoni\0Pont de Lisboa\0T\xc3\xbanel de Radio Andorra\0Avinguda de Sant Antoni\00|0|512\0Port d'Envalira\01|512\0Avinguda Sant Antoni\0CG3\0Avinguda del Trav\xc3\xa9s\0Avinguda el Trav\xc3\xa8s\0CG-2a\0T\xc3\xbanel d'Envalira\0Avinguda del Consell General\0France\0Occitanie\0N 22\0\x02\x16\0\x05\0Avinguda del Lloser\0Pont d'Ordino\0Avinguda del Pont d'Ordino\0Avinguda del Casamanya\00|512\0Travessia d'Ordino\00|1024\0Rotonda de Soldeu\0Rotonda del Tarter\0Pont de Castellar\0\0\0\0",
+}

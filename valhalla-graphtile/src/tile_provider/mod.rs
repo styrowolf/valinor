@@ -39,7 +39,7 @@ pub trait GraphTileProvider {
     ///
     /// Implementations should ensure that they look up the base ID for IDs that are passed in
     /// with [`GraphId::tile_base_id`].
-    fn get_tile(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError>;
+    fn get_tile_containing(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError>;
 
     /// Gets the opposing edge and the tile containing it.
     ///
@@ -52,7 +52,7 @@ pub trait GraphTileProvider {
         &self,
         graph_id: &GraphId,
     ) -> Result<(GraphId, GraphTile), GraphTileProviderError> {
-        let tile = self.get_tile(graph_id)?;
+        let tile = self.get_tile_containing(graph_id)?;
         let edge = tile.get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
@@ -64,7 +64,7 @@ pub trait GraphTileProvider {
         {
             Ok(index) => (tile, index),
             Err(LookupError::MismatchedBase) => {
-                let tile = self.get_tile(&end_node_id)?;
+                let tile = self.get_tile_containing(&end_node_id)?;
                 let index = tile.get_node(&end_node_id)?.edge_index();
                 (tile, index)
             }
@@ -75,7 +75,7 @@ pub trait GraphTileProvider {
         let id = GraphId::try_from_components(
             end_node_id.level(),
             end_node_id.tile_id(),
-            u64::from(node_edge_index + opp_edge_index),
+            (node_edge_index + opp_edge_index) as u64,
         )?;
 
         // TODO: Should we try to return the edge too?

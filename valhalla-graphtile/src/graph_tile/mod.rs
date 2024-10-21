@@ -78,7 +78,6 @@ pub struct GraphTile {
     edge_bins: GraphId,
     // TODO: Complex forward restrictions
     // TODO: Complex reverse restrictions
-    // TODO: Edge info (shapes are here)
     // TODO: Street names (names here)
     // TODO: Lane connectivity
     // TODO: Predicted speeds
@@ -189,9 +188,17 @@ impl GraphTile {
 
     /// Gets edge info for a directed edge.
     pub fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo, GraphTileError> {
-        let start = self.header.edge_info_offset as usize;
-        let size = directed_edge.edge_info_offset() as usize;
-        Ok(EdgeInfo::try_from(self.memory.slice(start + size..))?)
+        let edge_info_start = self.header.edge_info_offset as usize;
+        let edge_info_offset = directed_edge.edge_info_offset() as usize;
+
+        // TODO: Text slice as a separate property or a function?
+        let text_start = self.header.text_list_offset as usize;
+        let text_size = self.header.lane_connectivity_offset as usize - text_start;
+
+        Ok(EdgeInfo::try_from((
+            self.memory.slice(edge_info_start + edge_info_offset..),
+            self.memory.slice(text_start..text_start + text_size),
+        ))?)
     }
 }
 
@@ -350,7 +357,6 @@ mod tests {
     use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
     use crate::Access;
     use enumset::{enum_set, EnumSet};
-    use geo::CoordsIter;
 
     #[test]
     fn test_get_opp_edge_index() {
@@ -425,13 +431,20 @@ mod tests {
         let first_edge_info = tile
             .get_edge_info(&tile.directed_edges[0])
             .expect("Unable to get edge info.");
-        insta::assert_debug_snapshot!(first_edge_info);
-
-        insta::assert_debug_snapshot!(first_edge_info.shape());
+        insta::assert_debug_snapshot!("first_edge_info", first_edge_info);
+        insta::assert_debug_snapshot!("first_edge_info_decoded_shape", first_edge_info.shape());
+        insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
 
         let last_edge_info = tile
             .get_edge_info(&tile.directed_edges.last().unwrap())
             .expect("Unable to get edge info.");
-        insta::assert_debug_snapshot!(last_edge_info);
+        insta::assert_debug_snapshot!("last_edge_info", last_edge_info);
+
+        // Edge chosen somewhat randomly; it happens to have multiple names.
+        let other_edge_info = tile
+            .get_edge_info(&tile.directed_edges[2000])
+            .expect("Unable to get edge info.");
+        insta::assert_debug_snapshot!("other_edge_info", other_edge_info);
+        insta::assert_debug_snapshot!("other_edge_info_names", other_edge_info.get_names());
     }
 }

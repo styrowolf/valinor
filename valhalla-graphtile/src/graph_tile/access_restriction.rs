@@ -106,7 +106,7 @@ mod tests {
     fn test_parse_access_restrictions() {
         let tile = &*TEST_GRAPH_TILE;
 
-        insta::assert_debug_snapshot!(tile.access_restrictions[0]);
+        insta::assert_debug_snapshot!("first_access_restriction", tile.access_restrictions[0]);
 
         assert_eq!(
             tile.access_restrictions[0].restriction_type(),
@@ -117,7 +117,10 @@ mod tests {
             EnumSet::from(Access::Truck)
         );
 
-        insta::assert_debug_snapshot!(tile.access_restrictions.last().unwrap());
+        insta::assert_debug_snapshot!(
+            "last_access_restriction",
+            tile.access_restrictions.last().unwrap()
+        );
 
         // TODO: Other sanity checks after we add some more advanced methods
     }

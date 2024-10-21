@@ -15,7 +15,7 @@ impl DirectoryTileProvider {
 }
 
 impl GraphTileProvider for DirectoryTileProvider {
-    fn get_tile(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError> {
+    fn get_tile_containing(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError> {
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
@@ -50,7 +50,9 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryTileProvider::new(base);
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = provider.get_tile(&graph_id).expect("Unable to get tile");
+        let tile = provider
+            .get_tile_containing(&graph_id)
+            .expect("Unable to get tile");
 
         // Minimally test that we got the correct tile
         assert_eq!(tile.header.graph_id(), graph_id);
@@ -66,7 +68,9 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryTileProvider::new(base);
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = provider.get_tile(&graph_id).expect("Unable to get tile");
+        let tile = provider
+            .get_tile_containing(&graph_id)
+            .expect("Unable to get tile");
 
         // Cross-check the default implementation of the opposing edge ID function.
         // We only check a subset because it takes too long otherwise.

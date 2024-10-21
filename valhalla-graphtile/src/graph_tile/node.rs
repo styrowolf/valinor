@@ -332,8 +332,8 @@ mod test {
     fn test_parse_nodes() {
         let tile = &*TEST_GRAPH_TILE;
 
-        insta::assert_debug_snapshot!(tile.nodes[0]);
-        insta::assert_debug_snapshot!(tile.nodes.last().unwrap());
+        insta::assert_debug_snapshot!("first_node", tile.nodes[0]);
+        insta::assert_debug_snapshot!("last_node", tile.nodes.last().unwrap());
 
         // Sanity check our coordinate parsing
         let coord = tile.nodes[0].coordinate(tile.header.sw_corner());
@@ -360,7 +360,7 @@ mod test {
     fn test_parse_transitions() {
         let tile = &*TEST_GRAPH_TILE;
 
-        insta::assert_debug_snapshot!(tile.transitions[0]);
-        insta::assert_debug_snapshot!(tile.transitions.last().unwrap());
+        insta::assert_debug_snapshot!("first_transition", tile.transitions[0]);
+        insta::assert_debug_snapshot!("last_transition", tile.transitions.last().unwrap());
     }
 }

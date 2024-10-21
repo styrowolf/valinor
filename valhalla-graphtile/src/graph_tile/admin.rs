@@ -41,16 +41,20 @@ mod tests {
     fn test_parse_admins() {
         let tile = &*TEST_GRAPH_TILE;
 
-        insta::assert_debug_snapshot!(tile.admins);
-        insta::assert_debug_snapshot!(tile
-            .admins
-            .iter()
-            .map(|admin| admin.country_iso())
-            .collect::<Vec<_>>());
-        insta::assert_debug_snapshot!(tile
-            .admins
-            .iter()
-            .map(|admin| admin.principal_subdivision_iso())
-            .collect::<Vec<_>>());
+        insta::assert_debug_snapshot!("raw_admin_snapshot", tile.admins);
+        insta::assert_debug_snapshot!(
+            "country_iso",
+            tile.admins
+                .iter()
+                .map(|admin| admin.country_iso())
+                .collect::<Vec<_>>()
+        );
+        insta::assert_debug_snapshot!(
+            "principal_subdivision_iso",
+            tile.admins
+                .iter()
+                .map(|admin| admin.principal_subdivision_iso())
+                .collect::<Vec<_>>()
+        );
     }
 }

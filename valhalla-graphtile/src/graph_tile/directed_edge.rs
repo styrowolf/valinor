@@ -302,8 +302,8 @@ mod test {
     fn test_parse_nodes() {
         let tile = &*TEST_GRAPH_TILE;
 
-        insta::assert_debug_snapshot!(tile.directed_edges[0]);
-        insta::assert_debug_snapshot!(tile.directed_edges.last().unwrap());
+        insta::assert_debug_snapshot!("first_directed_edge", tile.directed_edges[0]);
+        insta::assert_debug_snapshot!("last_directed_edge", tile.directed_edges.last().unwrap());
 
         // TODO: Other sanity checks after we add some more advanced methods
     }

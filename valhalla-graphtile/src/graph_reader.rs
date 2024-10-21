@@ -7,7 +7,7 @@ pub struct GraphReader<T: GraphTileProvider> {
 }
 
 impl<T: GraphTileProvider> GraphTileProvider for GraphReader<T> {
-    fn get_tile(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError> {
-        self.tile_provider.get_tile(graph_id)
+    fn get_tile_containing(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError> {
+        self.tile_provider.get_tile_containing(graph_id)
     }
 }

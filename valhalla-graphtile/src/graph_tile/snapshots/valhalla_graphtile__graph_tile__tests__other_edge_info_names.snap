@@ -1,0 +1,8 @@
+---
+source: valhalla-graphtile/src/graph_tile/mod.rs
+expression: other_edge_info.get_names()
+---
+[
+    "Port d'Envalira",
+    "CG-2",
+]
