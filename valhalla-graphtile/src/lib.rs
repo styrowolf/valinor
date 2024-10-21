@@ -5,7 +5,6 @@
 
 // Private modules by default
 mod graph_id;
-mod graph_reader;
 pub mod graph_tile;
 pub(crate) mod macros;
 pub mod shape_codec;
@@ -24,7 +23,6 @@ use serde_derive::{Deserialize, Serialize};
 // But many of those only have one or two useful definitions to re-export,
 // so this flattens things for better ergonomics.
 pub use graph_id::GraphId;
-pub use graph_reader::GraphReader;
 
 /// Road class; broad hierarchies of relative (and sometimes locally specific) importance.
 ///
