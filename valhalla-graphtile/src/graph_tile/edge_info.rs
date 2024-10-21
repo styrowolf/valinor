@@ -1,6 +1,4 @@
-use crate::{
-    graph_tile::GraphTileError, shape_codec::decode_shape, transmute_variable_length_data, AsCowStr,
-};
+use crate::{graph_tile::GraphTileError, shape_codec::decode_shape, transmute_slice, AsCowStr};
 use bitfield_struct::bitfield;
 use bytes::Bytes;
 use bytes_varint::VarIntError;
@@ -73,9 +71,9 @@ struct EdgeInfoInner {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct EdgeInfo {
+pub struct EdgeInfo<'a> {
     inner: EdgeInfoInner,
-    name_info_list: Vec<NameInfo>,
+    name_info_list: &'a [NameInfo],
     /// The raw varint-encoded shape bytes.
     pub encoded_shape: Bytes,
     decoded_shape: OnceCell<LineString<f64>>,
@@ -85,7 +83,7 @@ pub struct EdgeInfo {
     // TODO: Tag cache
 }
 
-impl EdgeInfo {
+impl EdgeInfo<'_> {
     /// Gets the tagged speed limit along this edge (in kph).
     #[inline]
     pub const fn speed_limit(&self) -> u8 {
@@ -136,7 +134,7 @@ impl EdgeInfo {
 }
 
 // TODO: Feels like this could be a macro
-impl TryFrom<(Bytes, Bytes)> for EdgeInfo {
+impl TryFrom<(Bytes, Bytes)> for EdgeInfo<'_> {
     type Error = GraphTileError;
 
     fn try_from((bytes, text_list_memory): (Bytes, Bytes)) -> Result<Self, Self::Error> {
@@ -145,7 +143,7 @@ impl TryFrom<(Bytes, Bytes)> for EdgeInfo {
         let inner_slice: [u8; INNER_SIZE] = (&value[0..INNER_SIZE]).try_into()?;
         let inner: EdgeInfoInner = transmute!(inner_slice);
 
-        let (name_info_list, offset) = transmute_variable_length_data!(
+        let (name_info_list, offset) = transmute_slice!(
             NameInfo,
             value,
             INNER_SIZE,

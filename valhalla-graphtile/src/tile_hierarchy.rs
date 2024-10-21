@@ -45,9 +45,9 @@ impl TilingSystem {
         if self.tile_size > 1.0 {
             0
         } else if self.tile_size > 0.25 {
-            4
+            6
         } else {
-            11
+            12
         }
     }
 }

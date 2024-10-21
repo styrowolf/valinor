@@ -8,14 +8,14 @@ use valhalla_graphtile::tile_provider::{GraphTileProvider, GraphTileProviderErro
 use valhalla_graphtile::GraphId;
 
 // TODO: Signature
-pub(crate) fn next<T: GraphTileProvider>(
-    edge_pointer: EdgePointer,
+pub(crate) fn next<'a, T: GraphTileProvider>(
+    edge_pointer: EdgePointer<'a>,
     tile_set: HashMap<GraphId, usize>,
-    processed_edges: &BitSet,
+    processed_edges: &'a BitSet,
     tile_provider: T,
-    cli: &Cli,
-    names: &Vec<Cow<str>>,
-) -> Result<EdgePointer, GraphTileProviderError> {
+    cli: &'a Cli,
+    names: &'a Vec<Cow<'a, str>>,
+) -> Result<EdgePointer<'a>, GraphTileProviderError> {
     let end_node_id = edge_pointer.edge().end_node_id();
     // Get the tile containing the node
     let tile = if edge_pointer.tile.may_contain_id(&end_node_id) {
@@ -52,12 +52,12 @@ pub(crate) fn next<T: GraphTileProvider>(
     unimplemented!("Working on it...")
 }
 
-pub(crate) struct EdgePointer {
+pub(crate) struct EdgePointer<'a> {
     pub graph_id: GraphId,
-    pub tile: Rc<GraphTile>,
+    pub tile: Rc<GraphTile<'a>>,
 }
 
-impl EdgePointer {
+impl EdgePointer<'_> {
     pub(crate) fn edge(&self) -> &DirectedEdge {
         self.tile
             .get_directed_edge(&self.graph_id)

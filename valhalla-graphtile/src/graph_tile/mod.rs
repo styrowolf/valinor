@@ -1,5 +1,5 @@
 use thiserror::Error;
-use zerocopy::{transmute, try_transmute};
+use zerocopy::{transmute};
 
 use bytes::Bytes;
 use enumset::EnumSet;
@@ -23,10 +23,7 @@ mod sign;
 mod transit;
 mod turn_lane;
 
-use crate::{
-    graph_id::{GraphId, InvalidGraphIdError},
-    transmute_variable_length_data, try_transmute_variable_length_data, Access,
-};
+use crate::{graph_id::{GraphId, InvalidGraphIdError}, transmute_slice, Access};
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
@@ -41,6 +38,8 @@ pub use turn_lane::TurnLane;
 pub enum GraphTileError {
     #[error("Unable to extract a slice of the correct length; the tile data is malformed.")]
     SliceArrayConversion(#[from] std::array::TryFromSliceError),
+    #[error("Unable to extract a slice of the correct length; the tile data is malformed.")]
+    SliceLength,
     #[error("The byte sequence is not valid for this type.")]
     ValidityError,
     #[error("Invalid graph ID.")]
@@ -56,25 +55,25 @@ pub enum LookupError {
 }
 
 /// A tile within the Valhalla hierarchical tile graph.
-pub struct GraphTile {
+pub struct GraphTile<'a> {
     memory: Bytes,
     /// Header with various metadata about the tile and internal sizes.
     pub header: GraphTileHeader,
     /// The list of nodes in the graph tile.
-    nodes: Vec<NodeInfo>,
+    nodes: &'a [NodeInfo],
     /// The list of transitions between nodes on different levels.
-    transitions: Vec<NodeTransition>,
-    directed_edges: Vec<DirectedEdge>,
-    ext_directed_edges: Vec<DirectedEdgeExt>,
-    access_restrictions: Vec<AccessRestriction>,
-    transit_departures: Vec<TransitDeparture>,
-    transit_stops: Vec<TransitStop>,
-    transit_routes: Vec<TransitRoute>,
-    transit_schedules: Vec<TransitSchedule>,
-    transit_transfers: Vec<TransitTransfer>,
-    signs: Vec<Sign>,
-    turn_lanes: Vec<TurnLane>,
-    admins: Vec<Admin>,
+    transitions: &'a [NodeTransition],
+    directed_edges: &'a [DirectedEdge],
+    ext_directed_edges: &'a [DirectedEdgeExt],
+    access_restrictions: &'a [AccessRestriction],
+    transit_departures: &'a [TransitDeparture],
+    transit_stops: &'a [TransitStop],
+    transit_routes: &'a [TransitRoute],
+    transit_schedules: &'a [TransitSchedule],
+    transit_transfers: &'a [TransitTransfer],
+    signs: &'a [Sign],
+    turn_lanes: &'a [TurnLane],
+    admins: &'a [Admin],
     edge_bins: GraphId,
     // TODO: Complex forward restrictions
     // TODO: Complex reverse restrictions
@@ -86,7 +85,7 @@ pub struct GraphTile {
     // TODO: Operator one stops(?)
 }
 
-impl GraphTile {
+impl GraphTile<'_> {
     /// Gets the Graph ID of the tile.
     #[inline]
     pub fn graph_id(&self) -> GraphId {
@@ -203,7 +202,7 @@ impl GraphTile {
 }
 
 // TODO: Feels like this could be a macro
-impl TryFrom<Bytes> for GraphTile {
+impl TryFrom<Bytes> for GraphTile<'_> {
     type Error = GraphTileError;
 
     fn try_from(bytes: Bytes) -> Result<Self, Self::Error> {
@@ -222,16 +221,17 @@ impl TryFrom<Bytes> for GraphTile {
         // All the variably sized data arrays
 
         let (nodes, offset) =
-            transmute_variable_length_data!(NodeInfo, value, offset, header.node_count() as usize)?;
+            transmute_slice!(NodeInfo, value, offset, header.node_count() as usize)?;
 
-        let (transitions, offset) = transmute_variable_length_data!(
+        let (transitions, offset) = transmute_slice!(
             NodeTransition,
             value,
             offset,
             header.transition_count() as usize
         )?;
 
-        let (directed_edges, offset) = try_transmute_variable_length_data!(
+        // FIXME: May not always be safe.
+        let (directed_edges, offset) = transmute_slice!(
             DirectedEdge,
             value,
             offset,
@@ -243,66 +243,70 @@ impl TryFrom<Bytes> for GraphTile {
         } else {
             0
         };
-        let (ext_directed_edges, offset) = transmute_variable_length_data!(
+        let (ext_directed_edges, offset) = transmute_slice!(
             DirectedEdgeExt,
             value,
             offset,
             directed_edge_ext_count
         )?;
 
-        let (access_restrictions, offset) = try_transmute_variable_length_data!(
+        // FIXME: May not always be safe
+        let (access_restrictions, offset) = transmute_slice!(
             AccessRestriction,
             value,
             offset,
             header.access_restriction_count() as usize
         )?;
 
-        let (transit_departures, offset) = transmute_variable_length_data!(
+        let (transit_departures, offset) = transmute_slice!(
             TransitDeparture,
             value,
             offset,
             header.departure_count() as usize
         )?;
 
-        let (transit_stops, offset) = transmute_variable_length_data!(
+        let (transit_stops, offset) = transmute_slice!(
             TransitStop,
             value,
             offset,
             header.stop_count() as usize
         )?;
 
-        let (transit_routes, offset) = transmute_variable_length_data!(
+        let (transit_routes, offset) = transmute_slice!(
             TransitRoute,
             value,
             offset,
             header.route_count() as usize
         )?;
 
-        let (transit_schedules, offset) = transmute_variable_length_data!(
+        let (transit_schedules, offset) = transmute_slice!(
             TransitSchedule,
             value,
             offset,
             header.schedule_count() as usize
         )?;
 
-        let (transit_transfers, offset) = transmute_variable_length_data!(
+        let (transit_transfers, offset) = transmute_slice!(
             TransitTransfer,
             value,
             offset,
             header.transfer_count() as usize
         )?;
 
+        // FIXME: May not always be safe.
         let (signs, offset) =
-            try_transmute_variable_length_data!(Sign, value, offset, header.sign_count() as usize)?;
+            transmute_slice!(Sign, value, offset, header.sign_count() as usize)?;
 
-        let (turn_lanes, offset) = try_transmute_variable_length_data!(
+        // FIXME: May not always be safe.
+        let (turn_lanes, offset) = transmute_slice!(
             TurnLane,
             value,
             offset,
             header.turn_lane_count() as usize
         )?;
 
-        let (admins, offset) = try_transmute_variable_length_data!(
+        // FIXME: May not always be safe
+        let (admins, offset) = transmute_slice!(
             Admin,
             value,
             offset,
