@@ -1,16 +1,24 @@
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
 use crate::{graph_tile::GraphTile, GraphId};
 use bytes::Bytes;
+use lru::LruCache;
+use std::cell::RefCell;
 use std::io::ErrorKind;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 pub struct DirectoryTileProvider {
     base_directory: PathBuf,
+    // TODO: This is SUPER hackish for now...
+    lru_cache: RefCell<LruCache<GraphId, Bytes>>,
 }
 
 impl DirectoryTileProvider {
-    pub fn new(base_directory: PathBuf) -> Self {
-        DirectoryTileProvider { base_directory }
+    pub fn new(base_directory: PathBuf, num_cached_tiles: NonZeroUsize) -> Self {
+        DirectoryTileProvider {
+            base_directory,
+            lru_cache: RefCell::new(LruCache::new(num_cached_tiles)),
+        }
     }
 }
 
@@ -19,14 +27,20 @@ impl GraphTileProvider for DirectoryTileProvider {
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
-        // TODO: Cache
-        let path = self.base_directory.join(base_graph_id.file_path("gph")?);
-        // Open the file and read all bytes into a buffer
-        // TODO: Handle compressed tiles
-        let data = Bytes::from(std::fs::read(path).map_err(|e| match e.kind() {
-            ErrorKind::NotFound => GraphTileProviderError::TileDoesNotExist,
-            _ => GraphTileProviderError::IoError(e),
-        })?);
+        let mut cache = self.lru_cache.borrow_mut();
+        let data = cache
+            .try_get_or_insert(base_graph_id, || {
+                let path = self.base_directory.join(base_graph_id.file_path("gph")?);
+                // Open the file and read all bytes into a buffer
+                // NOTE: Does not handle compressed tiles
+                let data = std::fs::read(path).map_err(|e| match e.kind() {
+                    ErrorKind::NotFound => GraphTileProviderError::TileDoesNotExist,
+                    _ => GraphTileProviderError::IoError(e),
+                })?;
+                Ok::<Bytes, GraphTileProviderError>(Bytes::from(data))
+            })
+            .cloned()?;
+
         // Construct a graph tile with the bytes
         Ok(GraphTile::try_from(data)?)
     }
@@ -41,6 +55,7 @@ mod test {
         distributions::{Distribution, Uniform},
         thread_rng,
     };
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
 
     #[test]
@@ -48,7 +63,7 @@ mod test {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-tiles");
-        let provider = DirectoryTileProvider::new(base);
+        let provider = DirectoryTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
         let tile = provider
             .get_tile_containing(&graph_id)
@@ -66,7 +81,7 @@ mod test {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-tiles");
-        let provider = DirectoryTileProvider::new(base);
+        let provider = DirectoryTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
         let tile = provider
             .get_tile_containing(&graph_id)

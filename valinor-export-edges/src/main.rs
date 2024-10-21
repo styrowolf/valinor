@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -71,7 +72,8 @@ impl Cli {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let reader = DirectoryTileProvider::new(cli.tile_path.clone());
+    // TODO: Make this configurable
+    let reader = DirectoryTileProvider::new(cli.tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
     if !cli.no_progress {
         _ = PROGRESS_STYLE.set(
@@ -212,11 +214,9 @@ fn main() -> anyhow::Result<()> {
             // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
             // Could also be useful for MLT representation?
 
-            // FIXME: The varint crate exports an error that doesn't conform to Error??
             // TODO: Truncate to 6 digits
             let shape: Vec<_> = edge_info
-                .shape()
-                .expect("That wasn't supposed to happen.")
+                .shape()?
                 .coords()
                 .map(|coord| [coord.x as f32, coord.y as f32])
                 .collect();

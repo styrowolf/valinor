@@ -113,7 +113,7 @@ struct MiscCountsBitFieldTwo {
 /// This contains metadata like version,
 /// number of nodes and edges,
 /// and pointer offsets to other data.
-#[derive(FromBytes, Debug)]
+#[derive(Copy, Clone, FromBytes, Debug)]
 #[repr(C)]
 pub struct GraphTileHeader {
     bit_field_1: FirstBitfield,

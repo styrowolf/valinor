@@ -1,5 +1,5 @@
 use thiserror::Error;
-use zerocopy::{transmute};
+use zerocopy::transmute;
 
 use bytes::Bytes;
 use enumset::EnumSet;
@@ -23,7 +23,10 @@ mod sign;
 mod transit;
 mod turn_lane;
 
-use crate::{graph_id::{GraphId, InvalidGraphIdError}, transmute_slice, Access};
+use crate::{
+    graph_id::{GraphId, InvalidGraphIdError},
+    transmute_slice, Access,
+};
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
 pub use directed_edge::{DirectedEdge, DirectedEdgeExt};
@@ -243,12 +246,8 @@ impl TryFrom<Bytes> for GraphTile<'_> {
         } else {
             0
         };
-        let (ext_directed_edges, offset) = transmute_slice!(
-            DirectedEdgeExt,
-            value,
-            offset,
-            directed_edge_ext_count
-        )?;
+        let (ext_directed_edges, offset) =
+            transmute_slice!(DirectedEdgeExt, value, offset, directed_edge_ext_count)?;
 
         // FIXME: May not always be safe
         let (access_restrictions, offset) = transmute_slice!(
@@ -265,19 +264,11 @@ impl TryFrom<Bytes> for GraphTile<'_> {
             header.departure_count() as usize
         )?;
 
-        let (transit_stops, offset) = transmute_slice!(
-            TransitStop,
-            value,
-            offset,
-            header.stop_count() as usize
-        )?;
+        let (transit_stops, offset) =
+            transmute_slice!(TransitStop, value, offset, header.stop_count() as usize)?;
 
-        let (transit_routes, offset) = transmute_slice!(
-            TransitRoute,
-            value,
-            offset,
-            header.route_count() as usize
-        )?;
+        let (transit_routes, offset) =
+            transmute_slice!(TransitRoute, value, offset, header.route_count() as usize)?;
 
         let (transit_schedules, offset) = transmute_slice!(
             TransitSchedule,
@@ -294,24 +285,15 @@ impl TryFrom<Bytes> for GraphTile<'_> {
         )?;
 
         // FIXME: May not always be safe.
-        let (signs, offset) =
-            transmute_slice!(Sign, value, offset, header.sign_count() as usize)?;
+        let (signs, offset) = transmute_slice!(Sign, value, offset, header.sign_count() as usize)?;
 
         // FIXME: May not always be safe.
-        let (turn_lanes, offset) = transmute_slice!(
-            TurnLane,
-            value,
-            offset,
-            header.turn_lane_count() as usize
-        )?;
+        let (turn_lanes, offset) =
+            transmute_slice!(TurnLane, value, offset, header.turn_lane_count() as usize)?;
 
         // FIXME: May not always be safe
-        let (admins, offset) = transmute_slice!(
-            Admin,
-            value,
-            offset,
-            header.admin_count() as usize
-        )?;
+        let (admins, offset) =
+            transmute_slice!(Admin, value, offset, header.admin_count() as usize)?;
 
         const U64_SIZE: usize = size_of::<u64>();
         let slice: [u8; U64_SIZE] = (&value[offset..offset + U64_SIZE]).try_into()?;
