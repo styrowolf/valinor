@@ -64,7 +64,15 @@ impl RoadClass {
             ),
         }
     }
+
+    pub const fn discriminant(&self) -> u8 {
+        // Safety: If the enum specifies a primitive representation,
+        // then the discriminant may be reliably accessed via unsafe pointer casting.
+        // https://doc.rust-lang.org/reference/items/enumerations.html#pointer-casting
+        unsafe { *(self as *const Self as *const u8) }
+    }
 }
+
 /// Sub-categorization of roads based on specialized usage.
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

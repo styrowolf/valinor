@@ -41,7 +41,7 @@ impl TilingSystem {
         self.n_rows * self.n_cols
     }
 
-    pub const fn min_zoom(&self) -> u32 {
+    pub const fn min_zoom(&self) -> u8 {
         if self.tile_size > 1.0 {
             0
         } else if self.tile_size > 0.25 {

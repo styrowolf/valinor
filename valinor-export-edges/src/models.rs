@@ -24,14 +24,18 @@ impl EdgePointer<'_> {
 struct Tippecanoe {
     layer: &'static str,
     #[serde(rename = "minzoom")]
-    min_zoom: u32,
+    min_zoom: u8,
 }
 
-impl From<&TileLevel> for Tippecanoe {
-    fn from(level: &TileLevel) -> Self {
+impl From<(&TileLevel, RoadClass)> for Tippecanoe {
+    fn from((level, road_class): (&TileLevel, RoadClass)) -> Self {
         Self {
             layer: level.name,
-            min_zoom: level.tiling_system.min_zoom(),
+            min_zoom: std::cmp::min(12, level.tiling_system.min_zoom() + match &level.minimum_road_class.discriminant() - road_class.discriminant() {
+                0 => 2,
+                1 => 1,
+                2.. => 0
+            }),
         }
     }
 }
@@ -120,7 +124,7 @@ impl EdgeRecord {
     ) -> Self {
         Self {
             record_type: "Feature",
-            tippecanoe: Tippecanoe::from(tile_level),
+            tippecanoe: Tippecanoe::from((tile_level, edge.classification())),
             geometry: Geometry::from(line_string),
             properties: EdgeProperties::new(names, edge, edge_info),
         }
