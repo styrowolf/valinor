@@ -31,6 +31,8 @@ pub use graph_id::GraphId;
 /// - For estimating speeds when better data is not available
 /// - To determine preference / avoidance for roads
 #[repr(u8)]
+#[derive(TryFromBytes, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum RoadClass {
     Motorway,
     Trunk,
@@ -42,6 +44,25 @@ pub enum RoadClass {
     ServiceOther,
 }
 
+impl RoadClass {
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
+    const fn from_bits(value: u8) -> Self {
+        // FIXME: This is hackish
+        match value {
+            0 => Self::Motorway,
+            1 => Self::Trunk,
+            2 => Self::Primary,
+            3 => Self::Secondary,
+            4 => Self::Tertiary,
+            5 => Self::Unclassified,
+            6 => Self::Residential,
+            7 => Self::ServiceOther,
+            _ => panic!("Invalid RoadClass. As far as I can tell, this crate doesn't support failable ops."),
+        }
+    }
+}
 /// Sub-categorization of roads based on specialized usage.
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -167,7 +188,7 @@ impl RoadUse {
             52 => RoadUse::EgressConnection,
             53 => RoadUse::PlatformConnection,
             54 => RoadUse::TransitConnection,
-            _ => panic!("As far as I can tell, this crate doesn't support failable ops."),
+            _ => panic!("Invalid RoadUse. As far as I can tell, this crate doesn't support failable ops."),
         }
     }
 }
@@ -194,6 +215,25 @@ pub enum Access {
     GolfCart,
     // NOTE: Only 12 bits are allowed to be used, so this enum cannot contain any more variants!
     // All = 4095,
+}
+
+impl Access {
+    pub fn as_char(&self) -> char {
+        match self {
+            Access::Auto => 'a',
+            Access::Pedestrian => 'p',
+            Access::Bicycle => 'b',
+            Access::Truck => 'T',
+            Access::Emergency => 'e',
+            Access::Taxi => 't',
+            Access::Bus => 'B',
+            Access::HOV => 'h',
+            Access::Wheelchair => 'w',
+            Access::Moped => 'm',
+            Access::Motorcycle => 'M',
+            Access::GolfCart => 'g',
+        }
+    }
 }
 
 pub const VEHICULAR_ACCESS: EnumSet<Access> = enum_set!(

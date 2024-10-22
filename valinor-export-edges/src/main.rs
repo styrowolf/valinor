@@ -1,4 +1,3 @@
-use crate::helpers::EdgePointer;
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,10 +16,12 @@ use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
 };
 use valhalla_graphtile::{GraphId, RoadUse};
+use crate::models::EdgePointer;
 
 static PROGRESS_STYLE: OnceLock<ProgressStyle> = OnceLock::new();
 
 mod helpers;
+mod models;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -130,6 +131,7 @@ fn main() -> anyhow::Result<()> {
     // An efficient way of tracking whether we've seen an edge before
     // FIXME: Only works on 64-bit (or higher?) platforms
     // TODO: Does this crate actually work for 64-bit values? I also have some doubts about efficiency.
+    // TODO: Should we ever export nodes too in certain cases? Ex: a bollard on an otherwise driveable road?
     let mut processed_edges = BitSet::with_capacity(edge_count);
 
     let progress_bar = PROGRESS_STYLE.get().map(|style| {
@@ -235,11 +237,12 @@ fn main() -> anyhow::Result<()> {
                 "properties": {
                     // NOTE: We can't store an array in MVT
                     "names": names.join(" / "),
+                    "classification": edge.classification(),
                     // TODO: Directionality (forward/reverse)
                     // I don't know what forward means
                     "forward": edge.forward(),
-                    "forward_access": edge.forward_access().as_repr(),
-                    "reverse_access": edge.reverse_access().as_repr(),
+                    "forward_access": edge.forward_access().iter().map(|v| v.as_char()).collect::<String>(),
+                    "reverse_access": edge.reverse_access().iter().map(|v| v.as_char()).collect::<String>(),
                     // TODO: Bike network
                     // TODO: Estimated speed
                     "speed_limit": edge_info.speed_limit(),

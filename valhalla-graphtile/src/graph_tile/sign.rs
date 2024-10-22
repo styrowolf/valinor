@@ -41,7 +41,7 @@ impl SignType {
             8 => SignType::GuidanceViewSignboard,
             9 => SignType::TollName,
             255 => SignType::Linguistic,
-            _ => panic!("As far as I can tell, this crate doesn't support failable ops."),
+            _ => panic!("Invalid Sign. As far as I can tell, this crate doesn't support failable ops."),
         }
     }
 }

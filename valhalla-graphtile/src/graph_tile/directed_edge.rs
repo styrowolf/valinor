@@ -1,4 +1,4 @@
-use crate::{Access, GraphId, RoadUse};
+use crate::{Access, GraphId, RoadClass, RoadUse};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
 use std::fmt::{Debug, Formatter};
@@ -64,7 +64,7 @@ struct ThirdBitfield {
     #[bits(4)]
     density: u8,
     #[bits(3)]
-    classification: u8,
+    classification: RoadClass,
     #[bits(3)]
     surface: u8,
     // Booleans represented this way for infailability.
@@ -299,6 +299,12 @@ impl DirectedEdge {
     pub fn reverse_access(&self) -> EnumSet<Access> {
         // Safety: The access bits are length 12, so invalid representations are impossible.
         unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access()) }
+    }
+
+    /// The classification of the road.
+    #[inline]
+    pub const fn classification(&self) -> RoadClass {
+        self.third_bitfield.classification()
     }
 }
 
