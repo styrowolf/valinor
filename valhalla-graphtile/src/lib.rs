@@ -59,7 +59,9 @@ impl RoadClass {
             5 => Self::Unclassified,
             6 => Self::Residential,
             7 => Self::ServiceOther,
-            _ => panic!("Invalid RoadClass. As far as I can tell, this crate doesn't support failable ops."),
+            _ => panic!(
+                "Invalid RoadClass. As far as I can tell, this crate doesn't support failable ops."
+            ),
         }
     }
 }
@@ -188,7 +190,9 @@ impl RoadUse {
             52 => RoadUse::EgressConnection,
             53 => RoadUse::PlatformConnection,
             54 => RoadUse::TransitConnection,
-            _ => panic!("Invalid RoadUse. As far as I can tell, this crate doesn't support failable ops."),
+            _ => panic!(
+                "Invalid RoadUse. As far as I can tell, this crate doesn't support failable ops."
+            ),
         }
     }
 }

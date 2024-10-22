@@ -766,7 +766,10 @@ dependencies = [
  "anyhow",
  "bit-set",
  "clap",
+ "geo",
  "indicatif",
+ "num-traits",
+ "serde",
  "serde_json",
  "valhalla-graphtile",
 ]

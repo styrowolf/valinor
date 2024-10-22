@@ -59,7 +59,7 @@ pub struct TileLevel {
     /// The minimum class of road contained in this hierarchy level.
     pub minimum_road_class: RoadClass,
     /// The human-readable name of the level.
-    pub name: String,
+    pub name: &'static str,
     /// The tiling system used for this level.
     pub tiling_system: TilingSystem,
 }
@@ -69,7 +69,7 @@ pub static STANDARD_LEVELS: LazyLock<[TileLevel; 3]> = LazyLock::new(|| {
         TileLevel {
             level: 0,
             minimum_road_class: RoadClass::Primary,
-            name: "highway".to_string(),
+            name: "highway",
             tiling_system: TilingSystem::new(
                 Rect::new(
                     coord! { x: -180f32, y: -90f32 },
@@ -81,7 +81,7 @@ pub static STANDARD_LEVELS: LazyLock<[TileLevel; 3]> = LazyLock::new(|| {
         TileLevel {
             level: 1,
             minimum_road_class: RoadClass::Tertiary,
-            name: "arterial".to_string(),
+            name: "arterial",
             tiling_system: TilingSystem::new(
                 Rect::new(
                     coord! { x: -180f32, y: -90f32 },
@@ -93,7 +93,7 @@ pub static STANDARD_LEVELS: LazyLock<[TileLevel; 3]> = LazyLock::new(|| {
         TileLevel {
             level: 2,
             minimum_road_class: RoadClass::ServiceOther,
-            name: "local".to_string(),
+            name: "local",
             tiling_system: TilingSystem::new(
                 Rect::new(
                     coord! { x: -180f32, y: -90f32 },
@@ -108,7 +108,7 @@ pub static STANDARD_LEVELS: LazyLock<[TileLevel; 3]> = LazyLock::new(|| {
 pub static TRANSIT_LEVEL: LazyLock<TileLevel> = LazyLock::new(|| TileLevel {
     level: 3,
     minimum_road_class: RoadClass::ServiceOther,
-    name: "transit".to_string(),
+    name: "transit",
     tiling_system: TilingSystem::new(
         Rect::new(
             coord! { x: -180f32, y: -90f32 },

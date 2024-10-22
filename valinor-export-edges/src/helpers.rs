@@ -1,3 +1,4 @@
+use crate::models::EdgePointer;
 use crate::Cli;
 use bit_set::BitSet;
 use std::borrow::Cow;
@@ -5,7 +6,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use valhalla_graphtile::tile_provider::{GraphTileProvider, GraphTileProviderError};
 use valhalla_graphtile::GraphId;
-use crate::models::EdgePointer;
 
 // TODO: Signature
 pub(crate) fn next<'a, T: GraphTileProvider>(

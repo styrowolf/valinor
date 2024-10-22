@@ -1,3 +1,4 @@
+use crate::models::{EdgePointer, EdgeRecord};
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -16,7 +17,6 @@ use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
 };
 use valhalla_graphtile::{GraphId, RoadUse};
-use crate::models::EdgePointer;
 
 static PROGRESS_STYLE: OnceLock<ProgressStyle> = OnceLock::new();
 
@@ -216,43 +216,14 @@ fn main() -> anyhow::Result<()> {
             // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
             // Could also be useful for MLT representation?
 
-            // TODO: Truncate to 6 digits
-            let shape: Vec<_> = edge_info
-                .shape()?
-                .coords()
-                .map(|coord| [coord.x as f32, coord.y as f32])
-                .collect();
-
             // Write it!
-            let record = json!({
-                "type": "Feature",
-                "tippecanoe": {
-                    "layer": STANDARD_LEVELS[tile_id.level() as usize].name,
-                    "minzoom": STANDARD_LEVELS[tile_id.level() as usize].tiling_system.min_zoom(),
-                },
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": shape,
-                },
-                "properties": {
-                    // NOTE: We can't store an array in MVT
-                    "names": names.join(" / "),
-                    "classification": edge.classification(),
-                    // TODO: Directionality (forward/reverse)
-                    // I don't know what forward means
-                    "forward": edge.forward(),
-                    "forward_access": edge.forward_access().iter().map(|v| v.as_char()).collect::<String>(),
-                    "reverse_access": edge.reverse_access().iter().map(|v| v.as_char()).collect::<String>(),
-                    // TODO: Bike network
-                    // TODO: Estimated speed
-                    "speed_limit": edge_info.speed_limit(),
-                    "use": edge.edge_use(),
-                    // TODO: Cycle lane
-                    // TODO: Sidewalk
-                    // TODO: Use sidepath
-                    // TODO: More TODOs...
-                }
-            });
+            let record = EdgeRecord::new(
+                &STANDARD_LEVELS[tile_id.level() as usize],
+                edge_info.shape()?,
+                names.join(" / "),
+                edge,
+                &edge_info,
+            );
             serde_json::to_writer(&mut writer, &record)?;
             writer.write(&['\n' as u8])?;
         }
