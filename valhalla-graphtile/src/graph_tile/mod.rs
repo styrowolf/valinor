@@ -145,7 +145,7 @@ impl GraphTile<'_> {
         let opp_edge_index = edge.opposing_edge_index();
 
         // TODO: Probably a cleaner pattern here?
-        let node_edge_index = self.get_node(&end_node_id).map(|n| n.edge_index())?;
+        let node_edge_index = self.get_node(&end_node_id).map(NodeInfo::edge_index)?;
 
         Ok(node_edge_index + opp_edge_index)
     }
@@ -197,10 +197,10 @@ impl GraphTile<'_> {
         let text_start = self.header.text_list_offset as usize;
         let text_size = self.header.lane_connectivity_offset as usize - text_start;
 
-        Ok(EdgeInfo::try_from((
+        EdgeInfo::try_from((
             self.memory.slice(edge_info_start + edge_info_offset..),
             self.memory.slice(text_start..text_start + text_size),
-        ))?)
+        ))
     }
 }
 
@@ -209,9 +209,10 @@ impl TryFrom<Bytes> for GraphTile<'_> {
     type Error = GraphTileError;
 
     fn try_from(bytes: Bytes) -> Result<Self, Self::Error> {
-        let value = bytes.as_ref();
         // Get the byte range of the header so we can transmute it
         const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
+
+        let value = bytes.as_ref();
         let header_range = 0..HEADER_SIZE;
 
         // Save the pointer to the list of nodes (the range is consumed)

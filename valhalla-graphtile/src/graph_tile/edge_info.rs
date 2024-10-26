@@ -101,7 +101,11 @@ impl EdgeInfo<'_> {
         self.inner.first_inner_bitfield.speed_limit()
     }
 
-    /// Gets the shape of the edge geometry as a LineString.
+    /// Gets the shape of the edge geometry as a [`LineString`].
+    ///
+    /// # Errors
+    ///
+    /// See [`decode_shape`] for a description of possible errors.
     ///
     /// # Performance
     ///
@@ -111,12 +115,11 @@ impl EdgeInfo<'_> {
     /// is live.
     pub fn shape(&self) -> Result<&LineString<f64>, VarIntError> {
         // TODO: Use https://doc.rust-lang.org/core/cell/struct.OnceCell.html#method.get_or_try_init when stabilized
-        match self.decoded_shape.get() {
-            Some(linestring) => Ok(linestring),
-            None => {
-                let shape = decode_shape(self.encoded_shape.clone())?;
-                Ok(self.decoded_shape.get_or_init(|| shape))
-            }
+        if let Some(linestring) = self.decoded_shape.get() {
+            Ok(linestring)
+        } else {
+            let shape = decode_shape(&self.encoded_shape)?;
+            Ok(self.decoded_shape.get_or_init(|| shape))
         }
     }
 
@@ -154,11 +157,11 @@ impl EdgeInfo<'_> {
     /// The way ID of the edge.
     #[inline]
     pub fn way_id(&self) -> u64 {
-        (self.extended_way_id_3 as u64) << 56
-            | (self.extended_way_id_2 as u64) << 48
-            | (self.inner.second_inner_bitfield.extended_way_id() as u64) << 40
-            | (self.inner.first_inner_bitfield.extended_way_id() as u64) << 32
-            | self.inner.way_id as u64
+        u64::from(self.extended_way_id_3) << 56
+            | u64::from(self.extended_way_id_2) << 48
+            | u64::from(self.inner.second_inner_bitfield.extended_way_id()) << 40
+            | u64::from(self.inner.first_inner_bitfield.extended_way_id()) << 32
+            | u64::from(self.inner.way_id)
     }
 }
 
@@ -193,7 +196,7 @@ impl TryFrom<(Bytes, Bytes)> for EdgeInfo<'_> {
             (0, offset)
         };
 
-        let (extended_way_id_3, offset) = if inner.second_inner_bitfield.extended_way_id_size() > 1
+        let (extended_way_id_3, _offset) = if inner.second_inner_bitfield.extended_way_id_size() > 1
         {
             (bytes[offset], offset + 1)
         } else {

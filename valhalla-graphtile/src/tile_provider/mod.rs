@@ -43,6 +43,15 @@ pub trait GraphTileProvider {
 
     /// Gets the opposing edge and the tile containing it.
     ///
+    /// # Errors
+    ///
+    /// This may fail under the following circumstances:
+    ///
+    /// - Failing to fetch the tile containing the graph ID
+    /// - The index within the tile being invalid
+    /// - Failing to fetch the tile containing the end node of the edge (or the end node therein)
+    /// - Corrupt end node information in the tile
+    ///
     /// # Performance
     ///
     /// This method always has to do a tile lookup (potentially cached, but a lookup nonetheless).
@@ -75,7 +84,7 @@ pub trait GraphTileProvider {
         let id = GraphId::try_from_components(
             end_node_id.level(),
             end_node_id.tile_id(),
-            (node_edge_index + opp_edge_index) as u64,
+            u64::from(node_edge_index + opp_edge_index),
         )?;
 
         // TODO: Should we try to return the edge too?

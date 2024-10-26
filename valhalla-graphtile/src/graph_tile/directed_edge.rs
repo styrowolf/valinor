@@ -281,7 +281,7 @@ impl DirectedEdge {
     /// The estimated edge speed, in kph.
     ///
     /// This is assigned from a variety of factors.
-    /// See https://valhalla.github.io/valhalla/speeds/.
+    /// See <https://valhalla.github.io/valhalla/speeds/>.
     ///
     /// TODO: Values above 250 are special
     #[inline]
@@ -292,7 +292,7 @@ impl DirectedEdge {
     /// The estimated speed of the edge when there is no traffic, in kph.
     ///
     /// This is assigned from a variety of factors.
-    /// See https://valhalla.github.io/valhalla/speeds/.
+    /// See <https://valhalla.github.io/valhalla/speeds/>.
     ///
     /// TODO: Values above 250 are special
     #[inline]
@@ -303,7 +303,7 @@ impl DirectedEdge {
     /// The estimated speed of the edge when there is traffic, in kph.
     ///
     /// This is assigned from a variety of factors.
-    /// See https://valhalla.github.io/valhalla/speeds/.
+    /// See <https://valhalla.github.io/valhalla/speeds/>.
     ///
     /// TODO: Values above 250 are special
     #[inline]
@@ -314,7 +314,7 @@ impl DirectedEdge {
     /// The estimated speed of the edge for trucks, in kph.
     ///
     /// This is assigned from a variety of factors.
-    /// See https://valhalla.github.io/valhalla/speeds/.
+    /// See <https://valhalla.github.io/valhalla/speeds/>.
     ///
     /// TODO: Values above 250 are special
     #[inline]
@@ -413,7 +413,7 @@ impl Serialize for DirectedEdge {
     where
         S: Serializer,
     {
-        let num_fields = 22;
+        let num_fields = 19;
 
         #[cfg(not(feature = "serialize_predicted_speed"))]
         let num_fields = num_fields - 1;
@@ -440,9 +440,6 @@ impl Serialize for DirectedEdge {
         state.serialize_field("no_thru", &self.no_thru())?;
 
         state.serialize_field("speed", &self.speed())?;
-        state.serialize_field("free_flow_speed", &self.free_flow_speed())?;
-        state.serialize_field("constrained_flow_speed", &self.constrained_flow_speed())?;
-        state.serialize_field("truck_speed", &self.truck_speed())?;
         // TODO: Name consistency
         state.serialize_field("use", &self.edge_use())?;
         state.serialize_field("lane_count", &self.lane_count())?;

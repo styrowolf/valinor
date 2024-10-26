@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
     "valhalla-graphtile",
-    "valinor-export-edges",
+    "valinor-export-graph",
 ]
 
 [workspace.dependencies]

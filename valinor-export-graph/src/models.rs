@@ -1,5 +1,4 @@
 use geo::LineString;
-use num_traits::identities::Zero;
 use serde::Serialize;
 use std::rc::Rc;
 use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, GraphTile};

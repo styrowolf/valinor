@@ -5,6 +5,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -33,6 +34,7 @@ struct Cli {
     tile_path: PathBuf,
 
     /// Path to the output directory where files will be created.
+    /// The special value - will write all data to stdout.
     ///
     /// These will be newline-delimited GeoJSON,
     /// and any existing files will be overwritten.
@@ -67,6 +69,10 @@ impl Cli {
             || edge.is_shortcut()
             || (self.skip_ferries && edge.edge_use() == RoadUse::Ferry)
             || (self.skip_unnamed && names.is_empty())
+    }
+
+    fn use_stdout(&self) -> bool {
+        self.output_dir == PathBuf::from("-")
     }
 }
 
@@ -140,15 +146,24 @@ fn main() -> anyhow::Result<()> {
         bar
     });
 
-    std::fs::create_dir_all(cli.output_dir.clone())?;
+    if !cli.use_stdout() {
+        // Create directories as needed
+        std::fs::create_dir_all(cli.output_dir.clone())?;
+    }
+
     for (tile_id, edge_index_offset) in &tile_set {
         let tile = Rc::new(reader.get_tile_containing(&tile_id)?);
-        let path = cli.output_dir.join(tile.graph_id().file_path("geojson")?);
-        let parent = path.parent().expect("Unexpected path structure");
-        // Create the output directory
-        std::fs::create_dir_all(parent)?;
 
-        let mut writer = BufWriter::new(File::create(path)?);
+        let mut writer = BufWriter::new(if cli.use_stdout() {
+            Box::new(io::stdout()) as Box<dyn Write>
+        } else {
+            let path = cli.output_dir.join(tile.graph_id().file_path("geojson")?);
+            let parent = path.parent().expect("Unexpected path structure");
+            // Create the output directory
+            std::fs::create_dir_all(parent)?;
+            Box::new(File::create(path)?)
+        });
+
         let records = (0..tile.header.directed_edge_count() as usize)
             .map(|index| {
                 if processed_edges.contains(edge_index_offset + index) {

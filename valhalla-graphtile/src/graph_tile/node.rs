@@ -141,15 +141,16 @@ impl NodeInfo {
     /// so a reference coordinate (namely the SW corner of the tile)
     /// is required to compute the absolute position.
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn coordinate(&self, sw_corner: Coord<f32>) -> Coord<f32> {
         // NOTE: We are trying something a bit unorthodox here and attempting to save space
         // on storage of vast numbers of coordinates.
         // We also know the sw_corner resolution doesn't require f64.
         // But we still do all the internal math in f64 for better precision.
-        let lat_offset = (self.first_bit_field.lat_offset() as f64) * 1e-6f64
-            + (self.first_bit_field.lat_offset7() as f64) * 1e-7f64;
-        let lon_offset = (self.first_bit_field.lon_offset() as f64) * 1e-6f64
-            + (self.first_bit_field.lon_offset7() as f64) * 1e-7f64;
+        let lat_offset = f64::from(self.first_bit_field.lat_offset()) * 1e-6f64
+            + f64::from(self.first_bit_field.lat_offset7()) * 1e-7f64;
+        let lon_offset = f64::from(self.first_bit_field.lon_offset()) * 1e-6f64
+            + f64::from(self.first_bit_field.lon_offset7()) * 1e-7f64;
         sw_corner + coord! {x: lon_offset as f32, y: lat_offset as f32}
     }
 
@@ -308,6 +309,7 @@ impl NodeInfo {
             None
         } else {
             let shift = u64::from(local_edge_index) * 8;
+            #[allow(clippy::cast_possible_truncation)]
             Some(
                 (((self.headings & (255u64 << shift)) >> shift) as f32 * HEADING_EXPAND_FACTOR)
                     .round() as u16,

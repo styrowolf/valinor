@@ -22,7 +22,7 @@ pub struct TurnLane {
 /// Holds turn lane information at the end of a directed edge.
 ///
 /// Turn lane text is stored in the [`GraphTile`](super::GraphTile) text list
-/// and the offset is stored within the TurnLane structure.
+/// and the offset is stored within the [`TurnLane`] structure.
 impl TurnLane {
     /// Gets the index (within the same tile) of the directed edge that this sign applies to.
     #[inline]
