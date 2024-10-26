@@ -16,7 +16,7 @@ use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
 
 #[cfg(feature = "serde")]
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,
@@ -70,6 +70,46 @@ impl RoadClass {
         // then the discriminant may be reliably accessed via unsafe pointer casting.
         // https://doc.rust-lang.org/reference/items/enumerations.html#pointer-casting
         unsafe { *(self as *const Self as *const u8) }
+    }
+}
+
+/// Generalized surface type, ordered from best to worst.
+///
+/// Certain costing models use this to avoid or disallow edges
+/// which are "too rough" or anappropriate for the vehicle type to travel on.
+#[repr(u8)]
+#[derive(TryFromBytes, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+pub enum Surface {
+    PavedSmooth,
+    Paved,
+    PavedRough,
+    Compacted,
+    Dirt,
+    Gravel,
+    Path,
+    Impassable,
+}
+
+impl Surface {
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
+    const fn from_bits(value: u8) -> Self {
+        // FIXME: This is hackish
+        match value {
+            0 => Self::PavedSmooth,
+            1 => Self::Paved,
+            2 => Self::PavedRough,
+            3 => Self::Compacted,
+            4 => Self::Dirt,
+            5 => Self::Gravel,
+            6 => Self::Path,
+            7 => Self::Impassable,
+            _ => panic!(
+                "Invalid RoadClass. As far as I can tell, this crate doesn't support failable ops."
+            ),
+        }
     }
 }
 
@@ -211,6 +251,7 @@ impl RoadUse {
 /// NOTE: While it is a 16-bit integer, the way it is stored in directed edges
 /// only allows for TWELVE bits to be used!
 #[derive(Debug, EnumSetType)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[enumset(repr = "u16")]
 pub enum Access {
     Auto,

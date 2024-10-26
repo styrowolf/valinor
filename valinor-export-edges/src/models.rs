@@ -61,68 +61,44 @@ impl From<&LineString> for Geometry {
 }
 
 #[derive(Serialize)]
-struct EdgeProperties {
+struct EdgeProperties<'a> {
     // NOTE: We can't store an array in MVT
     names: String,
-    classification: RoadClass,
-    // TODO: Directionality (forward/reverse)
-    // I don't know what forward means
-    forward: bool,
-    forward_access: String,
-    reverse_access: String,
-    // TODO: Bike network
-    // TODO: Estimated speed
+    edge: &'a DirectedEdge,
+    // TODO: Use an EdgeInfo and impl Serialize on that
     #[serde(skip_serializing_if = "u8::is_zero")]
     speed_limit: u8,
-    #[serde(rename = "use")]
-    road_use: RoadUse,
-    // TODO: Cycle lane
-    // TODO: Sidewalk
-    // TODO: Use sidepath
-    // TODO: More TODOs...
 }
 
-impl EdgeProperties {
-    fn new(names: String, edge: &DirectedEdge, edge_info: &EdgeInfo) -> Self {
+impl EdgeProperties<'_> {
+    fn new<'a>(names: String, edge: &'a DirectedEdge, edge_info: &'a EdgeInfo<'a>) -> EdgeProperties<'a> {
         EdgeProperties {
             names,
-            classification: edge.classification(),
-            forward: edge.forward(),
-            forward_access: edge
-                .forward_access()
-                .iter()
-                .map(|v| v.as_char())
-                .collect::<String>(),
-            reverse_access: edge
-                .reverse_access()
-                .iter()
-                .map(|v| v.as_char())
-                .collect::<String>(),
+            edge,
             speed_limit: edge_info.speed_limit(),
-            road_use: edge.edge_use(),
         }
     }
 }
 
 #[derive(Serialize)]
-pub struct EdgeRecord {
+pub struct EdgeRecord<'a> {
     // TODO: Figure out how to make this a default?
     #[serde(rename = "type")]
     record_type: &'static str,
     tippecanoe: Tippecanoe,
     geometry: Geometry,
-    properties: EdgeProperties,
+    properties: EdgeProperties<'a>,
 }
 
-impl EdgeRecord {
-    pub fn new(
+impl EdgeRecord<'_> {
+    pub fn new<'a>(
         tile_level: &TileLevel,
         line_string: &LineString,
         names: String,
-        edge: &DirectedEdge,
-        edge_info: &EdgeInfo,
-    ) -> Self {
-        Self {
+        edge: &'a DirectedEdge,
+        edge_info: &'a EdgeInfo,
+    ) -> EdgeRecord<'a> {
+        EdgeRecord {
             record_type: "Feature",
             tippecanoe: Tippecanoe::from((tile_level, edge.classification())),
             geometry: Geometry::from(line_string),

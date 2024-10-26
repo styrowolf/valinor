@@ -2,7 +2,6 @@ use crate::models::{EdgePointer, EdgeRecord};
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use serde_json::json;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;

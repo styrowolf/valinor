@@ -1,10 +1,11 @@
-use crate::{Access, GraphId, RoadClass, RoadUse};
+use crate::{Access, GraphId, RoadClass, RoadUse, Surface};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
 use std::fmt::{Debug, Formatter};
-use zerocopy_derive::{FromBytes, Immutable, TryFromBytes};
+use serde::ser::SerializeStruct;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Serializer};
 
-#[derive(FromBytes)]
 #[bitfield(u64)]
 struct FirstBitfield {
     #[bits(46)]
@@ -23,17 +24,16 @@ struct FirstBitfield {
     country_crossing: u8,
 }
 
-#[derive(FromBytes)]
 #[bitfield(u64)]
 struct SecondBitfield {
     #[bits(25)]
     edge_info_offset: u32,
     #[bits(12)]
-    access_restrictions: u16,
+    access_restrictions: u16,  // TODO: type?
     #[bits(12)]
-    start_restriction: u16,
+    start_restriction: u16,    // TODO: type?
     #[bits(12)]
-    end_restriction: u16,
+    end_restriction: u16,      // TODO: type?
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
@@ -41,18 +41,17 @@ struct SecondBitfield {
     #[bits(1)]
     dest_only: u8,
     #[bits(1)]
-    not_thru: u8,
+    no_thru: u8,
 }
 
 #[bitfield(u64)]
-#[derive(TryFromBytes)]
 struct ThirdBitfield {
     #[bits(8)]
     speed: u8,
     #[bits(8)]
     free_flow_speed: u8,
     #[bits(8)]
-    constrained_flow_speedspeed: u8,
+    constrained_flow_speed: u8,
     #[bits(8)]
     truck_speed: u8,
     #[bits(8)]
@@ -66,7 +65,7 @@ struct ThirdBitfield {
     #[bits(3)]
     classification: RoadClass,
     #[bits(3)]
-    surface: u8,
+    surface: Surface,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
@@ -79,7 +78,6 @@ struct ThirdBitfield {
     has_predicted_speed: u8,
 }
 
-#[derive(FromBytes)]
 #[bitfield(u64)]
 struct FourthBitfield {
     #[bits(12)]
@@ -144,7 +142,6 @@ struct FourthBitfield {
     _spare: u8,
 }
 
-#[derive(FromBytes)]
 #[bitfield(u64)]
 struct FifthBitfield {
     #[bits(24)]
@@ -159,7 +156,6 @@ struct FifthBitfield {
     curvature: u8,
 }
 
-#[derive(FromBytes, Immutable)]
 #[bitfield(u32)]
 struct StopImpact {
     #[bits(24)]
@@ -171,14 +167,12 @@ struct StopImpact {
 /// Stores either the stop impact or the transit line identifier.
 /// Since transit lines are schedule-based, they have no need for edge transition logic,
 /// so we can freely share this field.
-#[derive(FromBytes, Immutable)]
 #[repr(C)]
 union StopOrLine {
     stop_impact: StopImpact,
     line_id: u32,
 }
 
-#[derive(FromBytes)]
 #[bitfield(u32)]
 struct SeventhBitField {
     #[bits(7)]
@@ -216,7 +210,7 @@ impl Debug for StopOrLine {
 /// Additional details can be found in the [`EdgeInfo`] struct,
 /// which contains things like the encoded shape, OSM way ID,
 /// and other info that is not necessary for making routing decisions.
-#[derive(TryFromBytes, Debug)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct DirectedEdge {
     first_bitfield: FirstBitfield,
@@ -236,23 +230,6 @@ impl DirectedEdge {
     pub const fn end_node_id(&self) -> GraphId {
         // Safety: We know the number of bits is limited
         unsafe { GraphId::from_id_unchecked(self.first_bitfield.end_node()) }
-    }
-
-    /// The way the edge is used.
-    #[inline]
-    pub fn edge_use(&self) -> RoadUse {
-        self.third_bitfield.edge_use()
-    }
-
-    /// Is this a transit line (buss or rail)?
-    ///
-    /// # Panics
-    ///
-    /// Can panic as a result of the issues noted in [`Self::edge_use`].
-    #[inline]
-    pub fn is_transit_line(&self) -> bool {
-        let edge_use = self.edge_use();
-        edge_use == RoadUse::Rail || edge_use == RoadUse::Bus
     }
 
     /// Gets the index of the opposing directed edge at the end node of this directed edge.
@@ -283,6 +260,133 @@ impl DirectedEdge {
         self.first_bitfield.forward() != 0
     }
 
+    /// Does the edge cross into a new country?
+    #[inline]
+    pub const fn country_crossing(&self) -> bool {
+        self.first_bitfield.country_crossing() != 0
+    }
+
+    /// Is the edge destination-only (ex: private roads)?
+    #[inline]
+    pub const fn dest_only(&self) -> bool {
+        self.second_bitfield.dest_only() != 0
+    }
+
+    /// Does the edge lead to a "no-through" region?
+    #[inline]
+    pub const fn no_thru(&self) -> bool {
+        self.second_bitfield.no_thru() != 0
+    }
+
+    /// The estimated edge speed, in kph.
+    ///
+    /// This is assigned from a variety of factors.
+    /// See https://valhalla.github.io/valhalla/speeds/.
+    ///
+    /// TODO: Values above 250 are special
+    #[inline]
+    pub const fn speed(&self) -> u8 {
+        self.third_bitfield.speed()
+    }
+
+    /// The estimated speed of the edge when there is no traffic, in kph.
+    ///
+    /// This is assigned from a variety of factors.
+    /// See https://valhalla.github.io/valhalla/speeds/.
+    ///
+    /// TODO: Values above 250 are special
+    #[inline]
+    pub const fn free_flow_speed(&self) -> u8 {
+        self.third_bitfield.free_flow_speed()
+    }
+
+    /// The estimated speed of the edge when there is traffic, in kph.
+    ///
+    /// This is assigned from a variety of factors.
+    /// See https://valhalla.github.io/valhalla/speeds/.
+    ///
+    /// TODO: Values above 250 are special
+    #[inline]
+    pub const fn constrained_flow_speed(&self) -> u8 {
+        self.third_bitfield.constrained_flow_speed()
+    }
+
+    /// The estimated speed of the edge for trucks, in kph.
+    ///
+    /// This is assigned from a variety of factors.
+    /// See https://valhalla.github.io/valhalla/speeds/.
+    ///
+    /// TODO: Values above 250 are special
+    #[inline]
+    pub const fn truck_speed(&self) -> u8 {
+        self.third_bitfield.truck_speed()
+    }
+
+    /// The way the edge is used.
+    #[inline]
+    pub fn edge_use(&self) -> RoadUse {
+        self.third_bitfield.edge_use()
+    }
+
+    /// Is this a transit line (bus or rail)?
+    ///
+    /// # Panics
+    ///
+    /// Can panic as a result of the issues noted in [`Self::edge_use`].
+    #[inline]
+    pub fn is_transit_line(&self) -> bool {
+        let edge_use = self.edge_use();
+        edge_use == RoadUse::Rail || edge_use == RoadUse::Bus
+    }
+
+    /// The number of lanes.
+    #[inline]
+    pub const fn lane_count(&self) -> u8 {
+        self.third_bitfield.lane_count()
+    }
+
+    /// The relative density along the edge.
+    #[inline]
+    pub const fn density(&self) -> u8 {
+        self.third_bitfield.density()
+    }
+
+    /// The classification of the road.
+    #[inline]
+    pub const fn classification(&self) -> RoadClass {
+        self.third_bitfield.classification()
+    }
+
+    /// The generalized road surface type.
+    #[inline]
+    pub const fn surface(&self) -> Surface {
+        self.third_bitfield.surface()
+    }
+
+    /// Is this edge part of a toll road?
+    #[inline]
+    pub const fn toll(&self) -> bool {
+        self.third_bitfield.toll() != 0
+    }
+
+    /// Is this edge part of a roundabout?
+    #[inline]
+    pub const fn roundabout(&self) -> bool {
+        self.third_bitfield.roundabout() != 0
+    }
+
+    /// Is this edge part of a truck route?
+    #[inline]
+    pub const fn truck_route(&self) -> bool {
+        self.third_bitfield.truck_route() != 0
+    }
+
+    /// Does this edge have predicted speeds?
+    #[inline]
+    pub const fn has_predicted_speed(&self) -> bool {
+        self.third_bitfield.has_predicted_speed() != 0
+    }
+
     /// Gets the forward access modes.
     ///
     /// TODO: Determine the impact of [`self.forward`] on this
@@ -300,11 +404,55 @@ impl DirectedEdge {
         // Safety: The access bits are length 12, so invalid representations are impossible.
         unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access()) }
     }
+}
 
-    /// The classification of the road.
-    #[inline]
-    pub const fn classification(&self) -> RoadClass {
-        self.third_bitfield.classification()
+// The bitfield struct macros break serde field attributes, so we roll our own for now.
+#[cfg(feature = "serde")]
+impl Serialize for DirectedEdge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer
+    {
+        let num_fields = 22;
+
+        #[cfg(not(feature = "serialize_predicted_speed"))]
+        let num_fields = num_fields - 1;
+
+        let mut state = serializer.serialize_struct("DirectedEdge", num_fields)?;
+
+        state.serialize_field("forward", &self.forward())?;
+        state.serialize_field("country_crossing", &self.country_crossing())?;
+
+        state.serialize_field("access_restrictions", &self.second_bitfield.access_restrictions())?;
+        state.serialize_field("start_restriction", &self.second_bitfield.start_restriction())?;
+        state.serialize_field("end_restriction", &self.second_bitfield.end_restriction())?;
+        state.serialize_field("complex_restriction", &self.second_bitfield.complex_restriction())?;
+        state.serialize_field("dest_only", &self.dest_only())?;
+        state.serialize_field("no_thru", &self.no_thru())?;
+
+        state.serialize_field("speed", &self.speed())?;
+        state.serialize_field("free_flow_speed", &self.free_flow_speed())?;
+        state.serialize_field("constrained_flow_speed", &self.constrained_flow_speed())?;
+        state.serialize_field("truck_speed", &self.truck_speed())?;
+        // TODO: Name consistency
+        state.serialize_field("use", &self.edge_use())?;
+        state.serialize_field("lane_count", &self.lane_count())?;
+        state.serialize_field("classification", &self.classification())?;
+        state.serialize_field("surface", &self.surface())?;
+        state.serialize_field("toll", &self.toll())?;
+        state.serialize_field("roundabout", &self.roundabout())?;
+        state.serialize_field("truck_route", &self.truck_route())?;
+        #[cfg(feature = "serialize_predicted_speed")]
+        state.serialize_field("has_predicted_speed", &self.has_predicted_speed())?;
+
+        state.serialize_field("forward_access", &self.forward_access().iter()
+                .map(|v| v.as_char())
+                .collect::<String>())?;
+        state.serialize_field("reverse_access", &self.reverse_access().iter()
+                .map(|v| v.as_char())
+                .collect::<String>())?;
+
+        state.end()
     }
 }
 
@@ -313,7 +461,7 @@ impl DirectedEdge {
 /// This structure provides the ability to add extra
 /// attributes to directed edges without breaking backward compatibility.
 /// For now this structure is unused
-#[derive(FromBytes, Debug)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct DirectedEdgeExt(u64);
 

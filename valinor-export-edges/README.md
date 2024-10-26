@@ -26,6 +26,10 @@ tippecanoe -at -P -o valhalla.pmtiles --extend-zooms-if-still-dropping tiles-jso
 * GeoJSON is a terrible serialization format; it's massively bloated. Can we use something better?
   - Tippecanoe supports FlatGeoBuf, but not GeoParquet
   - Tippecanoe can accept input from stdin, but does it have to read everything? If so, the RAM requirement will be a problem.
-  - Could we just dump GeoParquet files and work with those directly?
+  - Could we just dump GeoParquet files and work with those?
     - Would be a heck of a lot better write throughput, and bypass the whole step
     - GeoParquet also supports a wider range of types
+    - Could *not* use Tippecanoe effectively AFAIK
+    - [parquet-wasm](https://github.com/kylebarron/parquet-wasm) is a thing... looks like a fair bit of work though
+    - Something like [this](https://github.com/sfomuseum/go-geoparquet-show)?
+    - Parquet backend to Stadia Maps tile server seems reasonable for our own prod deployment

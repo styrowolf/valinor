@@ -12,7 +12,7 @@ indicatif = { workspace = true }
 num-traits = { workspace = true }
 serde_json = { workspace = true }
 valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde"] }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { workspace = true }
 
 [lints]
 workspace = true
