@@ -421,10 +421,14 @@ mod tests {
         insta::assert_debug_snapshot!("first_edge_info_decoded_shape", first_edge_info.shape());
         insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
 
+        assert_eq!(first_edge_info.way_id(), 0);
+
         let last_edge_info = tile
             .get_edge_info(&tile.directed_edges.last().unwrap())
             .expect("Unable to get edge info.");
         insta::assert_debug_snapshot!("last_edge_info", last_edge_info);
+
+        assert_eq!(last_edge_info.way_id(), 247995246);
 
         // Edge chosen somewhat randomly; it happens to have multiple names.
         let other_edge_info = tile
@@ -432,5 +436,7 @@ mod tests {
             .expect("Unable to get edge info.");
         insta::assert_debug_snapshot!("other_edge_info", other_edge_info);
         insta::assert_debug_snapshot!("other_edge_info_names", other_edge_info.get_names());
+
+        assert_eq!(other_edge_info.way_id(), 28833880);
     }
 }

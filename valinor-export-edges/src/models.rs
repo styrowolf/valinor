@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::rc::Rc;
 use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, GraphTile};
 use valhalla_graphtile::tile_hierarchy::TileLevel;
-use valhalla_graphtile::{GraphId, RoadClass, RoadUse};
+use valhalla_graphtile::{GraphId, RoadClass};
 
 // TODO: Do we need this?
 pub struct EdgePointer<'a> {
@@ -31,11 +31,15 @@ impl From<(&TileLevel, RoadClass)> for Tippecanoe {
     fn from((level, road_class): (&TileLevel, RoadClass)) -> Self {
         Self {
             layer: level.name,
-            min_zoom: std::cmp::min(12, level.tiling_system.min_zoom() + match &level.minimum_road_class.discriminant() - road_class.discriminant() {
-                0 => 2,
-                1 => 1,
-                2.. => 0
-            }),
+            min_zoom: std::cmp::min(
+                12,
+                level.tiling_system.min_zoom()
+                    + match &level.minimum_road_class.discriminant() - road_class.discriminant() {
+                        0 => 2,
+                        1 => 1,
+                        2.. => 0,
+                    },
+            ),
         }
     }
 }
@@ -62,21 +66,15 @@ impl From<&LineString> for Geometry {
 
 #[derive(Serialize)]
 struct EdgeProperties<'a> {
-    // NOTE: We can't store an array in MVT
-    names: String,
+    #[serde(flatten)]
     edge: &'a DirectedEdge,
-    // TODO: Use an EdgeInfo and impl Serialize on that
-    #[serde(skip_serializing_if = "u8::is_zero")]
-    speed_limit: u8,
+    #[serde(flatten)]
+    edge_info: EdgeInfo<'a>,
 }
 
 impl EdgeProperties<'_> {
-    fn new<'a>(names: String, edge: &'a DirectedEdge, edge_info: &'a EdgeInfo<'a>) -> EdgeProperties<'a> {
-        EdgeProperties {
-            names,
-            edge,
-            speed_limit: edge_info.speed_limit(),
-        }
+    fn new<'a>(edge: &'a DirectedEdge, edge_info: EdgeInfo<'a>) -> EdgeProperties<'a> {
+        EdgeProperties { edge, edge_info }
     }
 }
 
@@ -93,16 +91,14 @@ pub struct EdgeRecord<'a> {
 impl EdgeRecord<'_> {
     pub fn new<'a>(
         tile_level: &TileLevel,
-        line_string: &LineString,
-        names: String,
         edge: &'a DirectedEdge,
-        edge_info: &'a EdgeInfo,
-    ) -> EdgeRecord<'a> {
-        EdgeRecord {
+        edge_info: EdgeInfo<'a>,
+    ) -> Result<EdgeRecord<'a>, anyhow::Error> {
+        Ok(EdgeRecord {
             record_type: "Feature",
             tippecanoe: Tippecanoe::from((tile_level, edge.classification())),
-            geometry: Geometry::from(line_string),
-            properties: EdgeProperties::new(names, edge, edge_info),
-        }
+            geometry: Geometry::from(edge_info.shape()?),
+            properties: EdgeProperties::new(edge, edge_info),
+        })
     }
 }

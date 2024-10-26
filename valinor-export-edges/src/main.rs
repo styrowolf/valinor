@@ -149,80 +149,82 @@ fn main() -> anyhow::Result<()> {
         std::fs::create_dir_all(parent)?;
 
         let mut writer = BufWriter::new(File::create(path)?);
-        for index in 0..tile.header.directed_edge_count() as usize {
-            if processed_edges.contains(edge_index_offset + index) {
-                continue;
-            }
+        let records = (0..tile.header.directed_edge_count() as usize)
+            .map(|index| {
+                if processed_edges.contains(edge_index_offset + index) {
+                    return Ok(None);
+                }
 
-            // TODO: Some TODO about transition edges in the original source
+                // TODO: Some TODO about transition edges in the original source
 
-            // Get the edge
-            // TODO: Helper for rewriting the index of a graph ID?
-            let edge_id = tile_id.with_index(index as u64)?;
-            let edge = tile.get_directed_edge(&edge_id)?;
+                // Get the edge
+                // TODO: Helper for rewriting the index of a graph ID?
+                let edge_id = tile_id.with_index(index as u64)?;
+                let edge = tile.get_directed_edge(&edge_id)?;
 
-            // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
-            processed_edges.insert(edge_index_offset + index);
+                // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
+                processed_edges.insert(edge_index_offset + index);
 
-            progress_bar.as_ref().inspect(|bar| bar.inc(1));
+                progress_bar.as_ref().inspect(|bar| bar.inc(1));
 
-            // Skip certain edge types based on the config
-            let edge_info = tile.get_edge_info(edge)?;
-            let names = edge_info.get_names();
-            if cli.should_skip_edge(edge, &names) {
-                continue;
-            }
+                // Skip certain edge types based on the config
+                let edge_info = tile.get_edge_info(edge)?;
+                let names = edge_info.get_names();
+                if cli.should_skip_edge(edge, &names) {
+                    return Ok(None);
+                }
 
-            // Get the opposing edge
+                // Get the opposing edge
 
-            let opposing_edge = match tile.clone().get_opp_edge_index(&edge_id) {
-                Ok(opp_edge_id) => {
-                    let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
-                    EdgePointer {
-                        graph_id: opp_graph_id,
-                        tile: tile.clone(),
+                let opposing_edge = match tile.clone().get_opp_edge_index(&edge_id) {
+                    Ok(opp_edge_id) => {
+                        let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
+                        EdgePointer {
+                            graph_id: opp_graph_id,
+                            tile: tile.clone(),
+                        }
                     }
-                }
-                Err(LookupError::InvalidIndex) => {
-                    return Err(LookupError::InvalidIndex)?;
-                }
-                Err(LookupError::MismatchedBase) => {
-                    let (opp_graph_id, tile) = reader.get_opposing_edge(&edge_id)?;
-                    let tile = Rc::new(tile);
-                    EdgePointer {
-                        graph_id: opp_graph_id,
-                        tile,
+                    Err(LookupError::InvalidIndex) => {
+                        return Err(LookupError::InvalidIndex)?;
                     }
+                    Err(LookupError::MismatchedBase) => {
+                        let (opp_graph_id, tile) = reader.get_opposing_edge(&edge_id)?;
+                        let tile = Rc::new(tile);
+                        EdgePointer {
+                            graph_id: opp_graph_id,
+                            tile,
+                        }
+                    }
+                };
+                progress_bar.as_ref().inspect(|bar| bar.inc(1));
+                if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
+                    processed_edges.insert(offset + opposing_edge.graph_id.index() as usize);
+                } else {
+                    // This happens in extracts, but shouldn't for the planet...
+                    eprintln!(
+                        "Missing opposite edge {} in tile set",
+                        opposing_edge.graph_id
+                    );
                 }
-            };
-            progress_bar.as_ref().inspect(|bar| bar.inc(1));
-            if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
-                processed_edges.insert(offset + opposing_edge.graph_id.index() as usize);
-            } else {
-                // This happens in extracts, but shouldn't for the planet...
-                eprintln!(
-                    "Missing opposite edge {} in tile set",
-                    opposing_edge.graph_id
-                );
-            }
 
-            // Keep some state about this section of road
-            // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
-            //     graph_id: edge_id,
-            //     tile: tile.clone(),
-            // }];
+                // Keep some state about this section of road
+                // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
+                //     graph_id: edge_id,
+                //     tile: tile.clone(),
+                // }];
 
-            // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
-            // Could also be useful for MLT representation?
+                // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
+                // Could also be useful for MLT representation?
 
-            // Write it!
-            let record = EdgeRecord::new(
-                &STANDARD_LEVELS[tile_id.level() as usize],
-                edge_info.shape()?,
-                names.join(" / "),
-                edge,
-                &edge_info,
-            );
+                Ok(Some(EdgeRecord::new(
+                    &STANDARD_LEVELS[tile_id.level() as usize],
+                    edge,
+                    edge_info,
+                )?))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        for record in records.iter().flatten() {
             serde_json::to_writer(&mut writer, &record)?;
             writer.write(&['\n' as u8])?;
         }

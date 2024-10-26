@@ -1,10 +1,10 @@
 use crate::{Access, GraphId, RoadClass, RoadUse, Surface};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use std::fmt::{Debug, Formatter};
 use serde::ser::SerializeStruct;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer};
+use std::fmt::{Debug, Formatter};
 
 #[bitfield(u64)]
 struct FirstBitfield {
@@ -29,11 +29,11 @@ struct SecondBitfield {
     #[bits(25)]
     edge_info_offset: u32,
     #[bits(12)]
-    access_restrictions: u16,  // TODO: type?
+    access_restrictions: u16, // TODO: type?
     #[bits(12)]
-    start_restriction: u16,    // TODO: type?
+    start_restriction: u16, // TODO: type?
     #[bits(12)]
-    end_restriction: u16,      // TODO: type?
+    end_restriction: u16, // TODO: type?
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
@@ -411,7 +411,7 @@ impl DirectedEdge {
 impl Serialize for DirectedEdge {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer
+        S: Serializer,
     {
         let num_fields = 22;
 
@@ -423,10 +423,19 @@ impl Serialize for DirectedEdge {
         state.serialize_field("forward", &self.forward())?;
         state.serialize_field("country_crossing", &self.country_crossing())?;
 
-        state.serialize_field("access_restrictions", &self.second_bitfield.access_restrictions())?;
-        state.serialize_field("start_restriction", &self.second_bitfield.start_restriction())?;
+        state.serialize_field(
+            "access_restrictions",
+            &self.second_bitfield.access_restrictions(),
+        )?;
+        state.serialize_field(
+            "start_restriction",
+            &self.second_bitfield.start_restriction(),
+        )?;
         state.serialize_field("end_restriction", &self.second_bitfield.end_restriction())?;
-        state.serialize_field("complex_restriction", &self.second_bitfield.complex_restriction())?;
+        state.serialize_field(
+            "complex_restriction",
+            &self.second_bitfield.complex_restriction(),
+        )?;
         state.serialize_field("dest_only", &self.dest_only())?;
         state.serialize_field("no_thru", &self.no_thru())?;
 
@@ -445,12 +454,22 @@ impl Serialize for DirectedEdge {
         #[cfg(feature = "serialize_predicted_speed")]
         state.serialize_field("has_predicted_speed", &self.has_predicted_speed())?;
 
-        state.serialize_field("forward_access", &self.forward_access().iter()
+        state.serialize_field(
+            "forward_access",
+            &self
+                .forward_access()
+                .iter()
                 .map(|v| v.as_char())
-                .collect::<String>())?;
-        state.serialize_field("reverse_access", &self.reverse_access().iter()
+                .collect::<String>(),
+        )?;
+        state.serialize_field(
+            "reverse_access",
+            &self
+                .reverse_access()
+                .iter()
                 .map(|v| v.as_char())
-                .collect::<String>())?;
+                .collect::<String>(),
+        )?;
 
         state.end()
     }

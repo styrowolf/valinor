@@ -1,12 +1,21 @@
-use crate::{graph_tile::GraphTileError, shape_codec::decode_shape, transmute_slice, AsCowStr};
+use crate::{
+    graph_tile::GraphTileError, shape_codec::decode_shape, transmute_slice, AsCowStr,
+    BicycleNetwork,
+};
 use bitfield_struct::bitfield;
 use bytes::Bytes;
 use bytes_varint::VarIntError;
+use enumset::EnumSet;
 use geo::LineString;
+use serde::ser::SerializeStruct;
 use std::borrow::Cow;
 use std::cell::OnceCell;
 use zerocopy::transmute;
 use zerocopy_derive::FromBytes;
+
+#[cfg(feature = "serde")]
+use serde::Serialize;
+use serde::Serializer;
 
 #[derive(FromBytes)]
 #[bitfield(u32)]
@@ -70,12 +79,14 @@ struct EdgeInfoInner {
 }
 
 #[derive(Debug)]
-#[repr(C)]
 pub struct EdgeInfo<'a> {
     inner: EdgeInfoInner,
     name_info_list: &'a [NameInfo],
     /// The raw varint-encoded shape bytes.
     pub encoded_shape: Bytes,
+    // Last 2 bytes of the 64-bit way ID
+    extended_way_id_2: u8,
+    extended_way_id_3: u8,
     decoded_shape: OnceCell<LineString<f64>>,
     // TODO: Final 2 bytes of a 64-bit way ID
     // TODO: Encoded elevation (pointer?)
@@ -131,6 +142,24 @@ impl EdgeInfo<'_> {
             })
             .collect()
     }
+
+    /// The bicycle network membership mask for this edge.
+    #[inline]
+    pub fn bicycle_network(&self) -> EnumSet<BicycleNetwork> {
+        // TODO: Look at ways to do this with FromBytes; this currently copies
+        // Safety: The access bits are length 4, so invalid representations are impossible.
+        unsafe { EnumSet::from_repr_unchecked(self.inner.first_inner_bitfield.bike_network()) }
+    }
+
+    /// The way ID of the edge.
+    #[inline]
+    pub fn way_id(&self) -> u64 {
+        (self.extended_way_id_3 as u64) << 56
+            | (self.extended_way_id_2 as u64) << 48
+            | (self.inner.second_inner_bitfield.extended_way_id() as u64) << 40
+            | (self.inner.first_inner_bitfield.extended_way_id() as u64) << 32
+            | self.inner.way_id as u64
+    }
 }
 
 // TODO: Feels like this could be a macro
@@ -150,15 +179,85 @@ impl TryFrom<(Bytes, Bytes)> for EdgeInfo<'_> {
             inner.second_inner_bitfield.name_count() as usize
         )?;
 
-        let encoded_shape =
-            bytes.slice(offset..offset + inner.second_inner_bitfield.encoded_shape_size() as usize);
+        let (encoded_shape, offset) = {
+            let end = offset + inner.second_inner_bitfield.encoded_shape_size() as usize;
+            (bytes.slice(offset..end), end)
+        };
+
+        // Maybe read a byte; the data structure on disk is tightly packed
+        // and drops bytes when possible in exchange for bits that are otherwise unused.
+        let (extended_way_id_2, offset) = if inner.second_inner_bitfield.extended_way_id_size() > 0
+        {
+            (bytes[offset], offset + 1)
+        } else {
+            (0, offset)
+        };
+
+        let (extended_way_id_3, offset) = if inner.second_inner_bitfield.extended_way_id_size() > 1
+        {
+            (bytes[offset], offset + 1)
+        } else {
+            (0, offset)
+        };
+
+        // TODO: Elevation
 
         Ok(Self {
             inner,
             name_info_list,
             encoded_shape,
+            extended_way_id_2,
+            extended_way_id_3,
             decoded_shape: OnceCell::new(),
             text_list_memory,
         })
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for EdgeInfo<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let num_fields = 4;
+
+        let speed_limit = self.speed_limit();
+        let num_fields = if speed_limit == 0 {
+            num_fields - 1
+        } else {
+            num_fields
+        };
+
+        let names = self.get_names().join(" / ");
+        let num_fields = if names.is_empty() {
+            num_fields - 1
+        } else {
+            num_fields
+        };
+
+        let mut state = serializer.serialize_struct("EdgeInfo", num_fields)?;
+        if !names.is_empty() {
+            state.serialize_field("names", &names)?;
+        }
+
+        state.serialize_field(
+            "bike_network",
+            &self
+                .bicycle_network()
+                .iter()
+                .map(|v| v.as_char())
+                .collect::<String>(),
+        )?;
+
+        if speed_limit != 0 {
+            state.serialize_field("speed_limit", &self.speed_limit())?;
+        }
+
+        state.serialize_field("way_id", &self.way_id())?;
+
+        // TODO: elevation
+
+        state.end()
     }
 }

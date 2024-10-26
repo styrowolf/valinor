@@ -9,7 +9,7 @@ We currently accomplish that by dumping to an intermediate format and tiling wit
 ### Dense tiles
 
 ```shell
-tippecanoe -Z3 -z12 -P -o valhalla.pmtiles --drop-smallest-as-needed --extend-zooms-if-still-dropping tiles-json/**.geojson
+tippecanoe -Z4 -z12 -P -o valhalla.pmtiles --drop-smallest-as-needed --extend-zooms-if-still-dropping tiles-json/**.geojson
 ```
 
 ### Sparse

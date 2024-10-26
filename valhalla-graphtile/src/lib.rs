@@ -300,6 +300,29 @@ pub const VEHICULAR_ACCESS: EnumSet<Access> = enum_set!(
         | Access::GolfCart
 );
 
+/// Bicycle network membership information.
+#[derive(Debug, EnumSetType)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[enumset(repr = "u8")]
+pub enum BicycleNetwork {
+    National,
+    Regional,
+    Local,
+    Mountain,
+    // NOTE: Only 4 bits are allowed here, so no more can be added without breaking the tile format.
+}
+
+impl BicycleNetwork {
+    pub fn as_char(&self) -> char {
+        match self {
+            BicycleNetwork::National => 'n',
+            BicycleNetwork::Regional => 'r',
+            BicycleNetwork::Local => 'l',
+            BicycleNetwork::Mountain => 'm',
+        }
+    }
+}
+
 /// The number of subdivisions in each graph tile
 const BIN_COUNT: u8 = 25;
 
