@@ -413,10 +413,10 @@ impl Serialize for DirectedEdge {
     where
         S: Serializer,
     {
-        let num_fields = 19;
+        let num_fields = 22;
 
         #[cfg(not(feature = "serialize_predicted_speed"))]
-        let num_fields = num_fields - 1;
+        let num_fields = num_fields - 3;
 
         let mut state = serializer.serialize_struct("DirectedEdge", num_fields)?;
 
@@ -440,9 +440,15 @@ impl Serialize for DirectedEdge {
         state.serialize_field("no_thru", &self.no_thru())?;
 
         state.serialize_field("speed", &self.speed())?;
+        #[cfg(feature = "serialize_predicted_speed")]
+        state.serialize_field("free_flow_speed", &self.free_flow_speed())?;
+        #[cfg(feature = "serialize_predicted_speed")]
+        state.serialize_field("constrained_flow_speed", &self.constrained_flow_speed())?;
+
         // TODO: Name consistency
         state.serialize_field("use", &self.edge_use())?;
         state.serialize_field("lane_count", &self.lane_count())?;
+        state.serialize_field("density", &self.density())?;
         state.serialize_field("classification", &self.classification())?;
         state.serialize_field("surface", &self.surface())?;
         state.serialize_field("toll", &self.toll())?;

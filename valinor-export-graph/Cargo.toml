@@ -2,6 +2,8 @@
 name = "valinor-export-graph"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
+authors = ["Ian Wagner <ian@stadiamaps.com>"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -13,6 +15,7 @@ num-traits = { workspace = true }
 serde_json = { workspace = true }
 valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde"] }
 serde = { workspace = true }
+zstd = "0.13.2"
 
 [lints]
 workspace = true

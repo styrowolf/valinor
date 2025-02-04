@@ -52,8 +52,8 @@ mod test {
     use crate::tile_provider::GraphTileProvider;
     use crate::GraphId;
     use rand::{
-        distributions::{Distribution, Uniform},
-        thread_rng,
+        distr::{Distribution, Uniform},
+        rng,
     };
     use std::num::NonZeroUsize;
     use std::path::PathBuf;
@@ -76,7 +76,7 @@ mod test {
 
     #[test]
     fn test_get_opp_edge() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
@@ -90,7 +90,7 @@ mod test {
         // Cross-check the default implementation of the opposing edge ID function.
         // We only check a subset because it takes too long otherwise.
         // See the performance note on get_opposing_edge.
-        let range = Uniform::from(0..u64::from(tile.header.directed_edge_count()));
+        let range = Uniform::try_from(0..u64::from(tile.header.directed_edge_count())).unwrap();
         for index in range.sample_iter(&mut rng).take(100) {
             let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
             let opp_edge_index = tile

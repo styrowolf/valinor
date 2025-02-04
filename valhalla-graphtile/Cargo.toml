@@ -2,6 +2,8 @@
 name = "valhalla-graphtile"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
+authors = ["Ian Wagner <ian@stadiamaps.com>"]
 
 [features]
 serde = ["dep:serde"]
@@ -10,13 +12,12 @@ serialize_predicted_speed = []
 [dependencies]
 thiserror = { workspace = true }
 geo = { workspace = true }
-bitfield-struct = "0.9.0"
+bitfield-struct = "0.10.1"
 bytes = { workspace = true }
 bytes-varint = "1.0.3"
 enumset = "1.1.5"
 lru = { workspace = true }
 serde = { workspace = true, optional = true }
-polyline = { workspace = true }
 zerocopy = { workspace = true }
 zerocopy-derive = { workspace = true }
 

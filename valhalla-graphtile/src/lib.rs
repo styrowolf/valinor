@@ -6,7 +6,8 @@
 // Private modules by default
 mod graph_id;
 pub mod graph_tile;
-pub(crate) mod macros;
+#[macro_use]
+mod internal_macros;
 pub mod shape_codec;
 pub mod tile_hierarchy;
 pub mod tile_provider;
@@ -14,6 +15,8 @@ pub mod tile_provider;
 use enumset::{enum_set, EnumSet, EnumSetType};
 use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
+
+pub(crate) use transmute_slice;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -76,7 +79,7 @@ impl RoadClass {
 /// Generalized surface type, ordered from best to worst.
 ///
 /// Certain costing models use this to avoid or disallow edges
-/// which are "too rough" or anappropriate for the vehicle type to travel on.
+/// which are "too rough" or an appropriate for the vehicle type to travel on.
 #[repr(u8)]
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

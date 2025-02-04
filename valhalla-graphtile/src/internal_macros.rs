@@ -1,7 +1,6 @@
 /// Transmutes variable length data into a &[T].
 /// This can't be written as a function because the const generics
 /// require explicit types and that context isn't available from function generic params.
-#[macro_export]
 macro_rules! transmute_slice {
     ($type:ty, $data:expr, $offset:expr, $item_count:expr) => {{
         const PTR_SIZE: usize = size_of::<$type>();

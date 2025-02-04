@@ -11,6 +11,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::OnceLock;
+use zstd::Encoder;
 use valhalla_graphtile::graph_tile::{DirectedEdge, LookupError};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
@@ -154,15 +155,17 @@ fn main() -> anyhow::Result<()> {
     for (tile_id, edge_index_offset) in &tile_set {
         let tile = Rc::new(reader.get_tile_containing(&tile_id)?);
 
-        let mut writer = BufWriter::new(if cli.use_stdout() {
+        let writer = BufWriter::new(if cli.use_stdout() {
             Box::new(io::stdout()) as Box<dyn Write>
         } else {
-            let path = cli.output_dir.join(tile.graph_id().file_path("geojson")?);
+            let path = cli.output_dir.join(tile.graph_id().file_path("geojson.zst")?);
             let parent = path.parent().expect("Unexpected path structure");
             // Create the output directory
             std::fs::create_dir_all(parent)?;
             Box::new(File::create(path)?)
         });
+
+        let mut writer = Encoder::new(writer, 0)?.auto_finish();
 
         let records = (0..tile.header.directed_edge_count() as usize)
             .map(|index| {
@@ -229,8 +232,17 @@ fn main() -> anyhow::Result<()> {
                 // }];
 
                 // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
+                // This should be an opt-in behavior for visualization of similar roads,
+                // but note that it then no longer becomes 1:1
                 // Could also be useful for MLT representation?
 
+                // TODO: Visualize the dead ends? End node in another layer at the end of edges that don't connect?
+
+                // TODO: Coalesce with opposing edge.
+                // Seems like we may be able to do something like this:
+                //   - Find which edge is "forward"
+                //   - Omit forward field
+                //   - Check if any difference in edge + opp edge tagging; I'd expect reversed access; anything else? Can test this...
                 Ok(Some(EdgeRecord::new(
                     &STANDARD_LEVELS[tile_id.level() as usize],
                     edge,
@@ -244,6 +256,8 @@ fn main() -> anyhow::Result<()> {
             writer.write(&['\n' as u8])?;
         }
     }
+
+    // TODO: Anything we need to do for nodes?
 
     progress_bar.inspect(ProgressBar::finish);
 
