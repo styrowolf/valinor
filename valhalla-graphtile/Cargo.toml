@@ -12,7 +12,7 @@ serialize_predicted_speed = ["serde"]
 [dependencies]
 thiserror = { workspace = true }
 geo = { workspace = true }
-bitfield-struct = "0.10.1"
+bitfield-struct = "0.11.0"
 bytes = { workspace = true }
 bytes-varint = "1.0.3"
 enumset = "1.1.5"

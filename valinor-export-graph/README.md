@@ -4,6 +4,8 @@ This tool exports data from a Valhalla tile graph.
 The intended use case is vector tile generation, so you can inspect a route graph.
 We currently accomplish this by dumping to an intermediate format and tiling with tippecanoe.
 
+![img.png](screenshot.png)
+
 ## Getting graph tiles
 
 Build a graph the way you usually do (docker image etc.).
