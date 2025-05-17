@@ -16,7 +16,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
+
+    - name: Build workspace
       run: cargo build --verbose
+
     - name: Run tests
       run: cargo test --verbose
+
+    - name: Build valhalla-graphtile in isolation (default feature flags)
+      run: cargo build -p valhalla-graphtile
+
+    - name: Build valhalla-graphtile in isolation (optional features)
+      run: cargo build -p valhalla-graphtile --features serde

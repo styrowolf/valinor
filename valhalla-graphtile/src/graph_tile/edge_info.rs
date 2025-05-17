@@ -7,15 +7,13 @@ use bytes::Bytes;
 use bytes_varint::VarIntError;
 use enumset::EnumSet;
 use geo::LineString;
-use serde::ser::SerializeStruct;
 use std::borrow::Cow;
 use std::cell::OnceCell;
 use zerocopy::transmute;
 use zerocopy_derive::FromBytes;
 
 #[cfg(feature = "serde")]
-use serde::Serialize;
-use serde::Serializer;
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 #[derive(FromBytes)]
 #[bitfield(u32)]

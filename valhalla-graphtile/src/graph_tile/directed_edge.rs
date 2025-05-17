@@ -1,9 +1,8 @@
 use crate::{Access, GraphId, RoadClass, RoadUse, Surface};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use serde::ser::SerializeStruct;
 #[cfg(feature = "serde")]
-use serde::{Serialize, Serializer};
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use std::fmt::{Debug, Formatter};
 
 #[bitfield(u64)]

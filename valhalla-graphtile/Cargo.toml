@@ -7,7 +7,7 @@ authors = ["Ian Wagner <ian@stadiamaps.com>"]
 
 [features]
 serde = ["dep:serde"]
-serialize_predicted_speed = []
+serialize_predicted_speed = ["serde"]
 
 [dependencies]
 thiserror = { workspace = true }
