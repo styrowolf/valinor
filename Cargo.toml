@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "valhalla-graphtile",
+    "valhalla-graphtile", "valhalla-traffic",
     "valinor-export-graph",
 ]
 

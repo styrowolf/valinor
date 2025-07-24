@@ -1,0 +1,22 @@
+[package]
+name = "valhalla-traffic"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = "0.22.1"
+byteorder = "1.5.0"
+tar = "0.4.44"
+valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde", "serialize_predicted_speed"] }
+zerocopy = { workspace = true }
+zerocopy-derive = { workspace = true }
+bitfield-struct = "0.11.0"
+pico-args = "0.5.0"
+csv = "1.3.1"
+walkdir = "2.5.0"
+memmap2 = "0.9.5"
+geo.workspace = true
+
+[lints]
+workspace = true

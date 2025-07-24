@@ -28,6 +28,12 @@ struct Tippecanoe {
 
 impl From<(&TileLevel, RoadClass)> for Tippecanoe {
     fn from((level, road_class): (&TileLevel, RoadClass)) -> Self {
+        if road_class.discriminant() > level.minimum_road_class.discriminant() {
+            return Self {
+                layer: level.name,
+                min_zoom: 12,
+            }
+        }
         Self {
             layer: level.name,
             min_zoom: std::cmp::min(
