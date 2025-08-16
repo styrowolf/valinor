@@ -5,7 +5,7 @@ use thiserror::Error;
 mod directory_tile_provider;
 
 use crate::graph_id::InvalidGraphIdError;
-use crate::graph_tile::{GraphTile, GraphTileError, LookupError};
+use crate::graph_tile::{GraphTile, GraphTileError, LookupError, NodeInfo};
 pub use directory_tile_provider::DirectoryTileProvider;
 
 #[derive(Debug, Error)]
