@@ -1,6 +1,6 @@
 //! # Valhalla Graph Tile Manipulation
 //!
-//! This is an oxidized version of the graph tile access, manipulation and data structures
+//! This is an oxidized version of the graph tile access, manipulation, and data structures
 //! of Valhalla's `baldr` module.
 
 // Private modules by default
@@ -12,7 +12,7 @@ pub mod shape_codec;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 
-use enumset::{enum_set, EnumSet, EnumSetType};
+use enumset::{EnumSet, EnumSetType, enum_set};
 use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
 

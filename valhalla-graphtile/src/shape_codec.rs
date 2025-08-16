@@ -8,7 +8,7 @@
 
 use bytes::Bytes;
 use bytes_varint::{VarIntError, VarIntSupport};
-use geo::{coord, Coord, LineString};
+use geo::{Coord, LineString, coord};
 
 const DECODE_PRECISION: f64 = 1e-6;
 

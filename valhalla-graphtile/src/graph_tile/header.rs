@@ -1,6 +1,6 @@
-use crate::{AsCowStr, GraphId, BIN_COUNT};
+use crate::{AsCowStr, BIN_COUNT, GraphId};
 use bitfield_struct::bitfield;
-use geo::{coord, Coord};
+use geo::{Coord, coord};
 use std::borrow::Cow;
 use zerocopy_derive::FromBytes;
 

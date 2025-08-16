@@ -1,5 +1,5 @@
 use super::RoadClass;
-use geo::{coord, Rect};
+use geo::{Rect, coord};
 use std::sync::LazyLock;
 
 /// A tiling system description.

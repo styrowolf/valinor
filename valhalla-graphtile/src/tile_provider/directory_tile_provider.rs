@@ -1,5 +1,5 @@
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
-use crate::{graph_tile::GraphTile, GraphId};
+use crate::{GraphId, graph_tile::GraphTile};
 use bytes::Bytes;
 use lru::LruCache;
 use std::cell::RefCell;
@@ -23,7 +23,10 @@ impl DirectoryTileProvider {
 }
 
 impl GraphTileProvider for DirectoryTileProvider {
-    fn get_tile_containing(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError> {
+    fn get_tile_containing(
+        &self,
+        graph_id: &GraphId,
+    ) -> Result<GraphTile<'_>, GraphTileProviderError> {
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
@@ -49,8 +52,8 @@ impl GraphTileProvider for DirectoryTileProvider {
 #[cfg(test)]
 mod test {
     use super::DirectoryTileProvider;
-    use crate::tile_provider::GraphTileProvider;
     use crate::GraphId;
+    use crate::tile_provider::GraphTileProvider;
     use rand::{
         distr::{Distribution, Uniform},
         rng,

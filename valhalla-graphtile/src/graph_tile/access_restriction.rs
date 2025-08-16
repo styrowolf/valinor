@@ -38,7 +38,9 @@ impl AccessRestrictionType {
             7 => AccessRestrictionType::TimedDenied,
             8 => AccessRestrictionType::DestinationAllowed,
             9 => AccessRestrictionType::MaxAxles,
-            _ => panic!("Invalid AccessRestriction. As far as I can tell, this crate doesn't support failable ops."),
+            _ => panic!(
+                "Invalid AccessRestriction. As far as I can tell, this crate doesn't support failable ops."
+            ),
         }
     }
 }

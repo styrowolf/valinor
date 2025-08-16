@@ -1,6 +1,6 @@
 use crate::{
-    graph_tile::GraphTileError, shape_codec::decode_shape, transmute_slice, AsCowStr,
-    BicycleNetwork,
+    AsCowStr, BicycleNetwork, graph_tile::GraphTileError, shape_codec::decode_shape,
+    transmute_slice,
 };
 use bitfield_struct::bitfield;
 use bytes::Bytes;
@@ -168,8 +168,8 @@ impl TryFrom<(Bytes, Bytes)> for EdgeInfo<'_> {
     type Error = GraphTileError;
 
     fn try_from((bytes, text_list_memory): (Bytes, Bytes)) -> Result<Self, Self::Error> {
-        let value = &bytes;
         const INNER_SIZE: usize = size_of::<EdgeInfoInner>();
+        let value = &bytes;
         let inner_slice: [u8; INNER_SIZE] = (&value[0..INNER_SIZE]).try_into()?;
         let inner: EdgeInfoInner = transmute!(inner_slice);
 

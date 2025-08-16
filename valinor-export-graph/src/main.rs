@@ -2,6 +2,7 @@ use crate::models::{EdgePointer, EdgeRecord};
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,18 +11,18 @@ use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::OnceLock;
-use zstd::Encoder;
+use std::sync::{Mutex, OnceLock};
 use valhalla_graphtile::graph_tile::{DirectedEdge, LookupError};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
 };
 use valhalla_graphtile::{GraphId, RoadUse};
+use zstd::Encoder;
 
 static PROGRESS_STYLE: OnceLock<ProgressStyle> = OnceLock::new();
 
-mod helpers;
+// mod helpers;
 mod models;
 
 #[derive(Parser)]
@@ -64,14 +65,6 @@ struct Cli {
 }
 
 impl Cli {
-    fn should_skip_edge(&self, edge: &DirectedEdge, names: &Vec<Cow<str>>) -> bool {
-        // TODO: Actually, visualizing the shortcuts as a separate layer COULD be quite interesting!
-        (self.skip_transit && edge.is_transit_line())
-            || edge.is_shortcut()
-            || (self.skip_ferries && edge.edge_use() == RoadUse::Ferry)
-            || (self.skip_unnamed && names.is_empty())
-    }
-
     fn use_stdout(&self) -> bool {
         self.output_dir == PathBuf::from("-")
     }
@@ -79,8 +72,18 @@ impl Cli {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    // TODO: Make this configurable
-    let reader = DirectoryTileProvider::new(cli.tile_path.clone(), NonZeroUsize::new(25).unwrap());
+    let tile_path = cli.tile_path.clone();
+    let reader = DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
+
+    let use_stdout = cli.use_stdout();
+
+    let should_skip_edge = |edge: &DirectedEdge, names: &Vec<Cow<str>>| {
+        // TODO: Actually, visualizing the shortcuts as a separate layer COULD be quite interesting!
+        (cli.skip_transit && edge.is_transit_line())
+            || edge.is_shortcut()
+            || (cli.skip_ferries && edge.edge_use() == RoadUse::Ferry)
+            || (cli.skip_unnamed && names.is_empty())
+    };
 
     if !cli.no_progress {
         _ = PROGRESS_STYLE.set(
@@ -93,8 +96,8 @@ fn main() -> anyhow::Result<()> {
 
     // TODO: Almost all code below feels like it can be abstracted into a graph traversal helper...
     // We could even make processing plugins with WASM LOL
-    // Enumerate edges in available tiles
 
+    // Enumerate edges in available tiles
     let mut tile_set = HashMap::new();
     let mut edge_count: usize = 0;
     for level in &*STANDARD_LEVELS {
@@ -138,39 +141,52 @@ fn main() -> anyhow::Result<()> {
     // FIXME: Only works on 64-bit (or higher?) platforms
     // TODO: Does this crate actually work for 64-bit values? I also have some doubts about efficiency.
     // TODO: Should we ever export nodes too in certain cases? Ex: a bollard on an otherwise driveable road?
-    let mut processed_edges = BitSet::with_capacity(edge_count);
+    let processed_edges = Mutex::new(BitSet::with_capacity(edge_count));
 
     let progress_bar = PROGRESS_STYLE.get().map(|style| {
         let bar = ProgressBar::new(edge_count as u64);
-        bar.set_message(format!("Exporting {edge_count} edges..."));
+        bar.set_message(format!(
+            "Exporting {edge_count} edges in {} tiles...",
+            tile_set.len()
+        ));
         bar.set_style(style.clone());
         bar
     });
 
-    if !cli.use_stdout() {
+    if !use_stdout {
         // Create directories as needed
         std::fs::create_dir_all(cli.output_dir.clone())?;
     }
 
-    for (tile_id, edge_index_offset) in &tile_set {
-        let tile = Rc::new(reader.get_tile_containing(&tile_id)?);
+    let out_dir = cli.output_dir.clone();
 
-        let writer = BufWriter::new(if cli.use_stdout() {
-            Box::new(io::stdout()) as Box<dyn Write>
-        } else {
-            let path = cli.output_dir.join(tile.graph_id().file_path("geojson.zst")?);
-            let parent = path.parent().expect("Unexpected path structure");
-            // Create the output directory
-            std::fs::create_dir_all(parent)?;
-            Box::new(File::create(path)?)
-        });
+    // Iterate over the tiles and export edges
+    tile_set
+        .par_iter()
+        .try_for_each(|(tile_id, edge_index_offset)| {
+            // NOTE: We can't share readers across threads (at least for now)
+            let reader =
+                DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-        let mut writer = Encoder::new(writer, 0)?.auto_finish();
+            let tile = Rc::new(reader.get_tile_containing(&tile_id)?);
 
-        let records = (0..tile.header.directed_edge_count() as usize)
-            .map(|index| {
-                if processed_edges.contains(edge_index_offset + index) {
-                    return Ok(None);
+            let writer = BufWriter::new(if use_stdout {
+                Box::new(io::stdout()) as Box<dyn Write>
+            } else {
+                let path = out_dir.join(tile.graph_id().file_path("geojson.zst")?);
+                let parent = path.parent().expect("Unexpected path structure");
+                // Create the output directory
+                std::fs::create_dir_all(parent)?;
+                Box::new(File::create(path)?)
+            });
+
+            let mut writer = Encoder::new(writer, 0)?.auto_finish();
+
+            for index in 0..tile.header.directed_edge_count() as usize {
+                let mut pe = processed_edges.lock().unwrap();
+                if pe.contains(edge_index_offset + index) {
+                    // Skip edges we've already processed
+                    continue;
                 }
 
                 // TODO: Some TODO about transition edges in the original source
@@ -181,15 +197,15 @@ fn main() -> anyhow::Result<()> {
                 let edge = tile.get_directed_edge(&edge_id)?;
 
                 // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
-                processed_edges.insert(edge_index_offset + index);
+                pe.insert(edge_index_offset + index);
 
                 progress_bar.as_ref().inspect(|bar| bar.inc(1));
 
                 // Skip certain edge types based on the config
                 let edge_info = tile.get_edge_info(edge)?;
                 let names = edge_info.get_names();
-                if cli.should_skip_edge(edge, &names) {
-                    return Ok(None);
+                if should_skip_edge(edge, &names) {
+                    continue;
                 }
 
                 // Get the opposing edge
@@ -216,7 +232,7 @@ fn main() -> anyhow::Result<()> {
                 };
                 progress_bar.as_ref().inspect(|bar| bar.inc(1));
                 if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
-                    processed_edges.insert(offset + opposing_edge.graph_id.index() as usize);
+                    pe.insert(offset + opposing_edge.graph_id.index() as usize);
                 } else {
                     // This happens in extracts, but shouldn't for the planet...
                     eprintln!(
@@ -224,6 +240,8 @@ fn main() -> anyhow::Result<()> {
                         opposing_edge.graph_id
                     );
                 }
+
+                drop(pe); // Release the lock
 
                 // Keep some state about this section of road
                 // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
@@ -243,19 +261,14 @@ fn main() -> anyhow::Result<()> {
                 //   - Find which edge is "forward"
                 //   - Omit forward field
                 //   - Check if any difference in edge + opp edge tagging; I'd expect reversed access; anything else? Can test this...
-                Ok(Some(EdgeRecord::new(
-                    &STANDARD_LEVELS[tile_id.level() as usize],
-                    edge,
-                    edge_info,
-                )?))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+                let record =
+                    EdgeRecord::new(&STANDARD_LEVELS[tile_id.level() as usize], edge, edge_info)?;
+                serde_json::to_writer(&mut writer, &record)?;
+                writer.write(&['\n' as u8])?;
+            }
 
-        for record in records.iter().flatten() {
-            serde_json::to_writer(&mut writer, &record)?;
-            writer.write(&['\n' as u8])?;
-        }
-    }
+            Ok::<_, anyhow::Error>(())
+        })?;
 
     // TODO: Anything we need to do for nodes?
 

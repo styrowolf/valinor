@@ -39,7 +39,10 @@ pub trait GraphTileProvider {
     ///
     /// Implementations should ensure that they look up the base ID for IDs that are passed in
     /// with [`GraphId::tile_base_id`].
-    fn get_tile_containing(&self, graph_id: &GraphId) -> Result<GraphTile, GraphTileProviderError>;
+    fn get_tile_containing(
+        &self,
+        graph_id: &GraphId,
+    ) -> Result<GraphTile<'_>, GraphTileProviderError>;
 
     /// Gets the opposing edge and the tile containing it.
     ///
@@ -60,7 +63,7 @@ pub trait GraphTileProvider {
     fn get_opposing_edge(
         &self,
         graph_id: &GraphId,
-    ) -> Result<(GraphId, GraphTile), GraphTileProviderError> {
+    ) -> Result<(GraphId, GraphTile<'_>), GraphTileProviderError> {
         let tile = self.get_tile_containing(graph_id)?;
         let edge = tile.get_directed_edge(graph_id)?;
 
@@ -69,7 +72,7 @@ pub trait GraphTileProvider {
         let opp_edge_index = edge.opposing_edge_index();
 
         // TODO: Probably a cleaner pattern here?
-        let (opp_tile, node_edge_index) = match tile.get_node(&end_node_id).map(|n| n.edge_index())
+        let (opp_tile, node_edge_index) = match tile.get_node(&end_node_id).map(NodeInfo::edge_index)
         {
             Ok(index) => (tile, index),
             Err(LookupError::MismatchedBase) => {

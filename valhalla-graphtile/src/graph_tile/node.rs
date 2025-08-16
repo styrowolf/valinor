@@ -1,7 +1,7 @@
 use crate::{Access, GraphId};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use geo::{coord, Coord};
+use geo::{Coord, coord};
 use zerocopy_derive::FromBytes;
 
 const NODE_ELEVATION_PRECISION: f32 = 0.25;

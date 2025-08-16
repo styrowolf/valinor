@@ -24,8 +24,9 @@ mod transit;
 mod turn_lane;
 
 use crate::{
+    Access,
     graph_id::{GraphId, InvalidGraphIdError},
-    transmute_slice, Access,
+    transmute_slice,
 };
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
@@ -189,7 +190,10 @@ impl GraphTile<'_> {
     }
 
     /// Gets edge info for a directed edge.
-    pub fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo, GraphTileError> {
+    pub fn get_edge_info(
+        &self,
+        directed_edge: &DirectedEdge,
+    ) -> Result<EdgeInfo<'_>, GraphTileError> {
         let edge_info_start = self.header.edge_info_offset as usize;
         let edge_info_offset = directed_edge.edge_info_offset() as usize;
 
@@ -341,9 +345,9 @@ static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
     use crate::Access;
-    use enumset::{enum_set, EnumSet};
+    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+    use enumset::{EnumSet, enum_set};
 
     #[test]
     fn test_get_opp_edge_index() {
@@ -384,9 +388,10 @@ mod tests {
             );
 
             // Empty set should yield no access restrictions
-            assert!(tile
-                .get_access_restrictions(edge_index, EnumSet::empty())
-                .is_empty());
+            assert!(
+                tile.get_access_restrictions(edge_index, EnumSet::empty())
+                    .is_empty()
+            );
 
             // This set includes one mode that matches 4 elements in the fixture tile,
             // and another mode that matches none.
