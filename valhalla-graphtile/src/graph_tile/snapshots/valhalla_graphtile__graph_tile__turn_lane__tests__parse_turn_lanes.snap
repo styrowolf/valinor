@@ -5,38 +5,62 @@ expression: tile.turn_lanes
 [
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 1710,
+            edge_index: U32(
+                1710,
+            ),
         },
-        text_offset: 702,
+        text_offset: U32(
+            702,
+        ),
     },
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 1728,
+            edge_index: U32(
+                1728,
+            ),
         },
-        text_offset: 726,
+        text_offset: U32(
+            726,
+        ),
     },
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 2403,
+            edge_index: U32(
+                2403,
+            ),
         },
-        text_offset: 962,
+        text_offset: U32(
+            962,
+        ),
     },
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 2417,
+            edge_index: U32(
+                2417,
+            ),
         },
-        text_offset: 962,
+        text_offset: U32(
+            962,
+        ),
     },
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 2719,
+            edge_index: U32(
+                2719,
+            ),
         },
-        text_offset: 987,
+        text_offset: U32(
+            987,
+        ),
     },
     TurnLane {
         edge_index: EdgeIndex {
-            edge_index: 2814,
+            edge_index: U32(
+                2814,
+            ),
         },
-        text_offset: 962,
+        text_offset: U32(
+            962,
+        ),
     },
 ]

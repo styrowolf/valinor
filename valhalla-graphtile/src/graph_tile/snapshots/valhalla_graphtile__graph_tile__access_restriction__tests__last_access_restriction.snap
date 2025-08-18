@@ -4,9 +4,15 @@ expression: tile.access_restrictions.last().unwrap()
 ---
 AccessRestriction {
     bitfield: AccessRestrictionBitField {
-        edge_index: 2581,
+        edge_index: U32(
+            2581,
+        ),
         restriction_type: MaxHeight,
-        modes: 233,
+        modes: U16(
+            233,
+        ),
     },
-    value: 430,
+    value: U64(
+        430,
+    ),
 }

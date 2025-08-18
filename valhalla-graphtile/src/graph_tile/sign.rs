@@ -1,5 +1,6 @@
 use bitfield_struct::bitfield;
-use zerocopy_derive::TryFromBytes;
+use zerocopy::{LE, U32};
+use zerocopy_derive::{FromBytes, Immutable, TryFromBytes, Unaligned};
 
 /// Holds a generic sign with type and text.
 ///
@@ -7,7 +8,7 @@ use zerocopy_derive::TryFromBytes;
 /// and the offset is stored within the sign.
 /// The directed edge index within the tile is also stored
 /// so that signs can be found via either the directed edge or node index.
-#[derive(TryFromBytes, Debug)]
+#[derive(TryFromBytes, Immutable, Unaligned, Debug)]
 #[repr(u8)]
 pub enum SignType {
     ExitNumber,
@@ -48,11 +49,15 @@ impl SignType {
     }
 }
 
-#[bitfield(u32)]
-#[derive(TryFromBytes)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SignBitField {
-    #[bits(22)]
-    edge_or_node_index: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    edge_or_node_index: U32<LE>,
     #[bits(8)]
     sign_type: SignType,
     #[bits(1)]
@@ -61,20 +66,20 @@ struct SignBitField {
     is_text_tagged: u8,
 }
 
-#[derive(TryFromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct Sign {
     bitfield: SignBitField,
     /// The offset into the [`GraphTile`](super::GraphTile) text list
     /// which contains the text for this sign.
-    pub text_offset: u32,
+    pub text_offset: U32<LE>,
 }
 
 impl Sign {
     /// Gets the index (within the same tile) of the directed edge or node this sign applies to.
     #[inline]
     pub fn edge_or_node_index(&self) -> u32 {
-        self.bitfield.edge_or_node_index()
+        self.bitfield.edge_or_node_index().get()
     }
 
     /// Gets the type of the sign.
@@ -106,7 +111,8 @@ mod tests {
 
     #[test]
     fn test_parse_sign_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(tile.signs.len(), tile.header.sign_count() as usize);
     }

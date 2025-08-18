@@ -1,19 +1,20 @@
 use geo::LineString;
 use serde::Serialize;
 use std::rc::Rc;
-use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, GraphTile};
+use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, OwnedGraphTile};
 use valhalla_graphtile::tile_hierarchy::TileLevel;
 use valhalla_graphtile::{GraphId, RoadClass};
 
 // TODO: Do we need this?
-pub struct EdgePointer<'a> {
+pub struct EdgePointer {
     pub graph_id: GraphId,
-    pub tile: Rc<GraphTile<'a>>,
+    pub tile: Rc<OwnedGraphTile>,
 }
 
-impl EdgePointer<'_> {
+impl EdgePointer {
     pub(crate) fn edge(&self) -> &DirectedEdge {
         self.tile
+            .as_tile()
             .get_directed_edge(&self.graph_id)
             .expect("That wasn't supposed to happen...")
     }

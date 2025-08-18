@@ -1,25 +1,24 @@
-use crate::{
-    AsCowStr, BicycleNetwork, graph_tile::GraphTileError, shape_codec::decode_shape,
-    transmute_slice,
-};
+use crate::{AsCowStr, BicycleNetwork, graph_tile::GraphTileError, shape_codec::decode_shape};
 use bitfield_struct::bitfield;
-use bytes::Bytes;
-use bytes_varint::VarIntError;
 use enumset::EnumSet;
 use geo::LineString;
 use std::borrow::Cow;
 use std::cell::OnceCell;
-use zerocopy::transmute;
-use zerocopy_derive::FromBytes;
+use zerocopy::{FromBytes, LE, U16, U32, transmute};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 pub struct NameInfo {
-    #[bits(24)]
-    name_offset: u32,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    name_offset: U32<LE>,
     /// Additional fields following the name.
     ///
     /// These can be used for additional information like phonetic readings.
@@ -36,11 +35,15 @@ pub struct NameInfo {
     _spare: u8,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FirstInnerBitfield {
-    #[bits(12)]
-    mean_elevation: u16,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    mean_elevation: U16<LE>,
     #[bits(4)]
     bike_network: u8,
     #[bits(8)]
@@ -49,13 +52,17 @@ struct FirstInnerBitfield {
     extended_way_id: u8,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SecondInnerBitfield {
     #[bits(4)]
     name_count: u8,
-    #[bits(16)]
-    encoded_shape_size: u16,
+    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    encoded_shape_size: U16<LE>,
     #[bits(8)]
     extended_way_id: u8,
     #[bits(2)]
@@ -66,12 +73,12 @@ struct SecondInnerBitfield {
     _spare: u8,
 }
 
-#[derive(Debug, FromBytes)]
+#[derive(Debug, FromBytes, Immutable, Unaligned)]
 #[repr(C)]
 struct EdgeInfoInner {
     // The first part of the OSM way ID
     // TODO: would be nice to reshuffle this in v4.0
-    way_id: u32,
+    way_id: U32<LE>,
     first_inner_bitfield: FirstInnerBitfield,
     second_inner_bitfield: SecondInnerBitfield,
 }
@@ -81,14 +88,14 @@ pub struct EdgeInfo<'a> {
     inner: EdgeInfoInner,
     name_info_list: &'a [NameInfo],
     /// The raw varint-encoded shape bytes.
-    pub encoded_shape: Bytes,
+    pub encoded_shape: &'a [u8],
     // Last 2 bytes of the 64-bit way ID
     extended_way_id_2: u8,
     extended_way_id_3: u8,
     decoded_shape: OnceCell<LineString<f64>>,
     // TODO: Final 2 bytes of a 64-bit way ID
     // TODO: Encoded elevation (pointer?)
-    text_list_memory: Bytes,
+    text_list_memory: &'a [u8],
     // TODO: Tag cache
 }
 
@@ -111,12 +118,12 @@ impl EdgeInfo<'_> {
     /// then it will be decoded during this method call.
     /// Subsequent fetches will be cached for as long as the `EdgeInfo`
     /// is live.
-    pub fn shape(&self) -> Result<&LineString<f64>, VarIntError> {
+    pub fn shape(&self) -> std::io::Result<&LineString<f64>> {
         // TODO: Use https://doc.rust-lang.org/core/cell/struct.OnceCell.html#method.get_or_try_init when stabilized
         if let Some(linestring) = self.decoded_shape.get() {
             Ok(linestring)
         } else {
-            let shape = decode_shape(&self.encoded_shape)?;
+            let shape = decode_shape(self.encoded_shape)?;
             Ok(self.decoded_shape.get_or_init(|| shape))
         }
     }
@@ -136,7 +143,7 @@ impl EdgeInfo<'_> {
                 // FIXME: Methods
                 // No, this is not a bug...
                 if ni.is_tagged() == 0 {
-                    Some(self.text_list_memory[ni.name_offset() as usize..].as_cow_str())
+                    Some(self.text_list_memory[ni.name_offset().get() as usize..].as_cow_str())
                 } else {
                     None
                 }
@@ -164,25 +171,24 @@ impl EdgeInfo<'_> {
 }
 
 // TODO: Feels like this could be a macro
-impl TryFrom<(Bytes, Bytes)> for EdgeInfo<'_> {
+impl<'a> TryFrom<(&'a [u8], &'a [u8])> for EdgeInfo<'a> {
     type Error = GraphTileError;
 
-    fn try_from((bytes, text_list_memory): (Bytes, Bytes)) -> Result<Self, Self::Error> {
+    fn try_from((bytes, text_list_memory): (&'a [u8], &'a [u8])) -> Result<Self, Self::Error> {
         const INNER_SIZE: usize = size_of::<EdgeInfoInner>();
-        let value = &bytes;
-        let inner_slice: [u8; INNER_SIZE] = (&value[0..INNER_SIZE]).try_into()?;
+        let inner_slice: [u8; INNER_SIZE] = (bytes[0..INNER_SIZE]).try_into()?;
         let inner: EdgeInfoInner = transmute!(inner_slice);
 
-        let (name_info_list, offset) = transmute_slice!(
-            NameInfo,
-            value,
-            INNER_SIZE,
-            inner.second_inner_bitfield.name_count() as usize
-        )?;
+        let (name_info_list, bytes) = <[NameInfo]>::ref_from_prefix_with_elems(
+            &bytes[INNER_SIZE..],
+            inner.second_inner_bitfield.name_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
+        let offset = 0;
         let (encoded_shape, offset) = {
-            let end = offset + inner.second_inner_bitfield.encoded_shape_size() as usize;
-            (bytes.slice(offset..end), end)
+            let end = offset + inner.second_inner_bitfield.encoded_shape_size().get() as usize;
+            (&bytes[offset..end], end)
         };
 
         // Maybe read a byte; the data structure on disk is tightly packed

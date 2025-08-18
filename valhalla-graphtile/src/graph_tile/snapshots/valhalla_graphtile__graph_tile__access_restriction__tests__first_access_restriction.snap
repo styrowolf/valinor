@@ -4,9 +4,15 @@ expression: "tile.access_restrictions[0]"
 ---
 AccessRestriction {
     bitfield: AccessRestrictionBitField {
-        edge_index: 1147,
+        edge_index: U32(
+            1147,
+        ),
         restriction_type: MaxWeight,
-        modes: 8,
+        modes: U16(
+            8,
+        ),
     },
-    value: 350,
+    value: U64(
+        350,
+    ),
 }

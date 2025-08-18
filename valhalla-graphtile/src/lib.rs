@@ -6,8 +6,6 @@
 // Private modules by default
 mod graph_id;
 pub mod graph_tile;
-#[macro_use]
-mod internal_macros;
 pub mod shape_codec;
 pub mod tile_hierarchy;
 pub mod tile_provider;
@@ -15,8 +13,6 @@ pub mod tile_provider;
 use enumset::{EnumSet, EnumSetType, enum_set};
 use std::borrow::Cow;
 use zerocopy_derive::TryFromBytes;
-
-pub(crate) use transmute_slice;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -26,6 +22,36 @@ use serde::{Deserialize, Serialize};
 // But many of those only have one or two useful definitions to re-export,
 // so this flattens things for better ergonomics.
 pub use graph_id::GraphId;
+
+mod conv_u64le {
+    use zerocopy::{LE, U64};
+    pub const fn from_inner(n: u64) -> U64<LE> {
+        U64::<LE>::new(n)
+    }
+    pub const fn into_inner(v: U64<LE>) -> u64 {
+        v.get()
+    }
+}
+
+mod conv_u32le {
+    use zerocopy::{LE, U32};
+    pub const fn from_inner(n: u32) -> U32<LE> {
+        U32::<LE>::new(n)
+    }
+    pub const fn into_inner(v: U32<LE>) -> u32 {
+        v.get()
+    }
+}
+
+mod conv_u16le {
+    use zerocopy::{LE, U16};
+    pub const fn from_inner(n: u16) -> U16<LE> {
+        U16::<LE>::new(n)
+    }
+    pub const fn into_inner(v: U16<LE>) -> u16 {
+        v.get()
+    }
+}
 
 /// Road class; broad hierarchies of relative (and sometimes locally specific) importance.
 ///
@@ -72,7 +98,7 @@ impl RoadClass {
         // Safety: If the enum specifies a primitive representation,
         // then the discriminant may be reliably accessed via unsafe pointer casting.
         // https://doc.rust-lang.org/reference/items/enumerations.html#pointer-casting
-        unsafe { *(self as *const Self as *const u8) }
+        unsafe { *std::ptr::from_ref::<Self>(self).cast::<u8>() }
     }
 }
 
@@ -327,7 +353,7 @@ impl BicycleNetwork {
 }
 
 /// The number of subdivisions in each graph tile
-const BIN_COUNT: u8 = 25;
+const BIN_COUNT: usize = 25;
 
 trait AsCowStr {
     /// Converts the value to a [`Cow<str>`],

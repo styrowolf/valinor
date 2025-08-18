@@ -119,8 +119,9 @@ fn main() -> anyhow::Result<()> {
             // Get the index pointer for each tile in the level
             let graph_id = GraphId::try_from_components(level.level, u64::from(tile_id), 0)?;
             match reader.get_tile_containing(&graph_id) {
-                Ok(tile) => {
-                    let tile_edge_count = tile.header.directed_edge_count() as usize;
+                Ok(owned_tile) => {
+                    let tile_edge_count =
+                        owned_tile.as_tile().header.directed_edge_count() as usize;
                     tile_set.insert(graph_id, edge_count);
                     edge_count += tile_edge_count;
                 }
@@ -168,7 +169,8 @@ fn main() -> anyhow::Result<()> {
             let reader =
                 DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-            let tile = Rc::new(reader.get_tile_containing(&tile_id)?);
+            let owned_tile = reader.get_tile_containing(&tile_id)?;
+            let tile = owned_tile.as_tile();
 
             let writer = BufWriter::new(if use_stdout {
                 Box::new(io::stdout()) as Box<dyn Write>
@@ -210,12 +212,12 @@ fn main() -> anyhow::Result<()> {
 
                 // Get the opposing edge
 
-                let opposing_edge = match tile.clone().get_opp_edge_index(&edge_id) {
+                let opposing_edge = match tile.get_opp_edge_index(&edge_id) {
                     Ok(opp_edge_id) => {
                         let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
                         EdgePointer {
                             graph_id: opp_graph_id,
-                            tile: tile.clone(),
+                            tile: owned_tile.clone(),
                         }
                     }
                     Err(LookupError::InvalidIndex) => {
@@ -223,7 +225,6 @@ fn main() -> anyhow::Result<()> {
                     }
                     Err(LookupError::MismatchedBase) => {
                         let (opp_graph_id, tile) = reader.get_opposing_edge(&edge_id)?;
-                        let tile = Rc::new(tile);
                         EdgePointer {
                             graph_id: opp_graph_id,
                             tile,
@@ -243,7 +244,7 @@ fn main() -> anyhow::Result<()> {
 
                 drop(pe); // Release the lock
 
-                // Keep some state about this section of road
+                // Keep some state about this section of road?
                 // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
                 //     graph_id: edge_id,
                 //     tile: tile.clone(),

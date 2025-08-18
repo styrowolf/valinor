@@ -4,7 +4,9 @@ expression: tile.header
 ---
 GraphTileHeader {
     bit_field_1: FirstBitfield {
-        graph_id: 24120,
+        graph_id: U64(
+            24120,
+        ),
         density: 0,
         name_quality: 0,
         speed_quality: 0,
@@ -13,8 +15,12 @@ GraphTileHeader {
         has_ext_directed_edge: 0,
     },
     base_lon_lat: [
-        0.0,
-        42.0,
+        F32(
+            0.0,
+        ),
+        F32(
+            42.0,
+        ),
     ],
     version: [
         51,
@@ -34,79 +40,200 @@ GraphTileHeader {
         0,
         0,
     ],
-    dataset_id: 12218323114,
+    dataset_id: U64(
+        12218323114,
+    ),
     bit_field_2: SecondBitfield {
-        node_count: 1343,
-        directed_edge_count: 3426,
-        predicted_speeds_count: 0,
+        node_count: U32(
+            1343,
+        ),
+        directed_edge_count: U32(
+            3426,
+        ),
+        predicted_speeds_count: U32(
+            0,
+        ),
     },
     transition_count_bitfield: TransitionCountBitfield {
-        transition_count: 712,
+        transition_count: U32(
+            712,
+        ),
     },
     turn_lane_count_bitfield: TurnLaneCountBitfield {
-        turn_lane_count: 6,
+        turn_lane_count: U32(
+            6,
+        ),
     },
     transit_record_bitfield: TransitRecordBitfield {
-        transfer_count: 0,
-        departure_count: 0,
-        stop_count: 0,
+        transfer_count: U16(
+            0,
+        ),
+        departure_count: U32(
+            0,
+        ),
+        stop_count: U16(
+            0,
+        ),
     },
     misc_counts_bit_field_one: MiscCountsBitFieldOne {
-        route_count: 0,
-        schedule_count: 0,
-        sign_count: 0,
+        route_count: U16(
+            0,
+        ),
+        schedule_count: U16(
+            0,
+        ),
+        sign_count: U32(
+            0,
+        ),
     },
     misc_counts_bit_field_two: MiscCountsBitFieldTwo {
-        access_restriction_count: 8,
-        admin_count: 4,
+        access_restriction_count: U32(
+            8,
+        ),
+        admin_count: U16(
+            4,
+        ),
     },
-    reserved: 0,
-    complex_restriction_forward_offset: 213632,
-    complex_restriction_reverse_offset: 213632,
-    edge_info_offset: 213632,
-    text_list_offset: 304836,
-    create_date: 0,
+    _reserved_1: U64(
+        0,
+    ),
+    _reserved_2: U64(
+        0,
+    ),
+    complex_restriction_forward_offset: U32(
+        213632,
+    ),
+    complex_restriction_reverse_offset: U32(
+        213632,
+    ),
+    edge_info_offset: U32(
+        213632,
+    ),
+    text_list_offset: U32(
+        304836,
+    ),
+    create_date: U32(
+        0,
+    ),
     bin_offsets: [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
     ],
-    lane_connectivity_offset: 305888,
-    predicted_speeds_offset: 0,
-    tile_size: 305888,
+    lane_connectivity_offset: U32(
+        305888,
+    ),
+    predicted_speeds_offset: U32(
+        0,
+    ),
+    tile_size: U32(
+        305888,
+    ),
     _empty_slots: [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
+        U32(
+            0,
+        ),
     ],
 }

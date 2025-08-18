@@ -1,11 +1,10 @@
 use thiserror::Error;
-use zerocopy::transmute;
+use zerocopy::{FromBytes, LE, U64, transmute};
 
-use bytes::Bytes;
 use enumset::EnumSet;
+use self_cell::self_cell;
 #[cfg(test)]
 use std::sync::LazyLock;
-
 // To keep files manageable, we will keep internal modules specific to each mega-struct,
 // and publicly re-export the public type.
 // Each struct should be tested on fixture tiles to a reasonable level of confidence.
@@ -26,7 +25,6 @@ mod turn_lane;
 use crate::{
     Access,
     graph_id::{GraphId, InvalidGraphIdError},
-    transmute_slice,
 };
 pub use access_restriction::{AccessRestriction, AccessRestrictionType};
 pub use admin::Admin;
@@ -48,6 +46,8 @@ pub enum GraphTileError {
     ValidityError,
     #[error("Invalid graph ID.")]
     GraphIdParseError(#[from] InvalidGraphIdError),
+    #[error("Data cast failed (this almost always means invalid data): {0}")]
+    CastError(String),
 }
 
 #[derive(Debug, Error)]
@@ -58,9 +58,36 @@ pub enum LookupError {
     InvalidIndex,
 }
 
+self_cell! {
+    /// An owned graph tile.
+    ///
+    /// An owned graph tile can be constructed from an owned byte array, `Vec<u8>`.
+    /// You can access the underlying data structure with [``.as_tile()``][OwnedGraphTile::as_tile].
+    pub struct OwnedGraphTile {
+        owner: Vec<u8>,
+        #[covariant]
+        dependent: GraphTile,
+    }
+}
+
+impl OwnedGraphTile {
+    #[inline]
+    pub fn as_tile(&self) -> &GraphTile<'_> {
+        self.borrow_dependent()
+    }
+}
+
+impl TryFrom<Vec<u8>> for OwnedGraphTile {
+    type Error = GraphTileError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        OwnedGraphTile::try_new(value, |data| GraphTile::try_from(data.as_ref()))
+    }
+}
+
 /// A tile within the Valhalla hierarchical tile graph.
 pub struct GraphTile<'a> {
-    memory: Bytes,
+    memory: &'a [u8],
     /// Header with various metadata about the tile and internal sizes.
     pub header: GraphTileHeader,
     /// The list of nodes in the graph tile.
@@ -194,116 +221,112 @@ impl GraphTile<'_> {
         &self,
         directed_edge: &DirectedEdge,
     ) -> Result<EdgeInfo<'_>, GraphTileError> {
-        let edge_info_start = self.header.edge_info_offset as usize;
+        let edge_info_start = self.header.edge_info_offset.get() as usize;
         let edge_info_offset = directed_edge.edge_info_offset() as usize;
 
         // TODO: Text slice as a separate property or a function?
-        let text_start = self.header.text_list_offset as usize;
-        let text_size = self.header.lane_connectivity_offset as usize - text_start;
+        let text_start = self.header.text_list_offset.get() as usize;
+        let text_size = self.header.lane_connectivity_offset.get() as usize - text_start;
 
         EdgeInfo::try_from((
-            self.memory.slice(edge_info_start + edge_info_offset..),
-            self.memory.slice(text_start..text_start + text_size),
+            &self.memory[edge_info_start + edge_info_offset..],
+            &self.memory[text_start..text_start + text_size],
         ))
     }
 }
 
 // TODO: Feels like this could be a macro
-impl TryFrom<Bytes> for GraphTile<'_> {
+impl<'a> TryFrom<&'a [u8]> for GraphTile<'a> {
     type Error = GraphTileError;
 
-    fn try_from(bytes: Bytes) -> Result<Self, Self::Error> {
+    fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
+        const U64_SIZE: usize = size_of::<u64>();
         // Get the byte range of the header so we can transmute it
         const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
 
-        let value = bytes.as_ref();
+        // Immutable reference to the slice which we'll keep re-binding as we go,
+        // consuming the DSTs as we go.
+        let buffer = bytes;
         let header_range = 0..HEADER_SIZE;
 
-        // Save the pointer to the list of nodes (the range is consumed)
-        let offset = header_range.end;
-
         // Header
-        let header_slice: [u8; HEADER_SIZE] = value[header_range].try_into()?;
+        let header_slice: [u8; HEADER_SIZE] = buffer[header_range].try_into()?;
         let header: GraphTileHeader = transmute!(header_slice);
 
-        // All the variably sized data arrays
+        // All the variably sized data arrays...
+        // The basic pattern here is to use ref_from_prefix_with_elems to consume a known number of elements
+        // from the byte slice, returning a reference to the tail.
+        // In this way, we don't need to track manual offsets; we just consume the known number of elements
+        // sequentially.
 
-        let (nodes, offset) =
-            transmute_slice!(NodeInfo, value, offset, header.node_count() as usize)?;
-
-        let (transitions, offset) = transmute_slice!(
-            NodeTransition,
-            value,
-            offset,
-            header.transition_count() as usize
-        )?;
-
-        // FIXME: May not always be safe.
-        let (directed_edges, offset) = transmute_slice!(
-            DirectedEdge,
-            value,
-            offset,
-            header.directed_edge_count() as usize
-        )?;
+        let (nodes, buffer) = <[NodeInfo]>::ref_from_prefix_with_elems(
+            &buffer[HEADER_SIZE..],
+            header.node_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (transitions, buffer) = <[NodeTransition]>::ref_from_prefix_with_elems(
+            buffer,
+            header.transition_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (directed_edges, buffer) = <[DirectedEdge]>::ref_from_prefix_with_elems(
+            buffer,
+            header.directed_edge_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
         let directed_edge_ext_count = if header.has_ext_directed_edge() {
             header.directed_edge_count() as usize
         } else {
             0
         };
-        let (ext_directed_edges, offset) =
-            transmute_slice!(DirectedEdgeExt, value, offset, directed_edge_ext_count)?;
+        let (ext_directed_edges, buffer) =
+            <[DirectedEdgeExt]>::ref_from_prefix_with_elems(buffer, directed_edge_ext_count)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        // FIXME: May not always be safe
-        let (access_restrictions, offset) = transmute_slice!(
-            AccessRestriction,
-            value,
-            offset,
-            header.access_restriction_count() as usize
-        )?;
+        let (access_restrictions, buffer) = <[AccessRestriction]>::ref_from_prefix_with_elems(
+            buffer,
+            header.access_restriction_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        let (transit_departures, offset) = transmute_slice!(
-            TransitDeparture,
-            value,
-            offset,
-            header.departure_count() as usize
-        )?;
+        let (transit_departures, buffer) = <[TransitDeparture]>::ref_from_prefix_with_elems(
+            buffer,
+            header.departure_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (transit_stops, buffer) =
+            <[TransitStop]>::ref_from_prefix_with_elems(buffer, header.stop_count() as usize)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (transit_routes, buffer) =
+            <[TransitRoute]>::ref_from_prefix_with_elems(buffer, header.route_count() as usize)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (transit_schedules, buffer) = <[TransitSchedule]>::ref_from_prefix_with_elems(
+            buffer,
+            header.schedule_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+        let (transit_transfers, buffer) = <[TransitTransfer]>::ref_from_prefix_with_elems(
+            buffer,
+            header.transfer_count() as usize,
+        )
+        .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        let (transit_stops, offset) =
-            transmute_slice!(TransitStop, value, offset, header.stop_count() as usize)?;
+        let (signs, buffer) =
+            <[Sign]>::ref_from_prefix_with_elems(buffer, header.sign_count() as usize)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        let (transit_routes, offset) =
-            transmute_slice!(TransitRoute, value, offset, header.route_count() as usize)?;
+        let (turn_lanes, buffer) =
+            <[TurnLane]>::ref_from_prefix_with_elems(buffer, header.turn_lane_count() as usize)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        let (transit_schedules, offset) = transmute_slice!(
-            TransitSchedule,
-            value,
-            offset,
-            header.schedule_count() as usize
-        )?;
+        let (admins, buffer) =
+            <[Admin]>::ref_from_prefix_with_elems(buffer, header.admin_count() as usize)
+                .map_err(|e| GraphTileError::CastError(e.to_string()))?;
 
-        let (transit_transfers, offset) = transmute_slice!(
-            TransitTransfer,
-            value,
-            offset,
-            header.transfer_count() as usize
-        )?;
-
-        // FIXME: May not always be safe.
-        let (signs, offset) = transmute_slice!(Sign, value, offset, header.sign_count() as usize)?;
-
-        // FIXME: May not always be safe.
-        let (turn_lanes, offset) =
-            transmute_slice!(TurnLane, value, offset, header.turn_lane_count() as usize)?;
-
-        // FIXME: May not always be safe
-        let (admins, offset) =
-            transmute_slice!(Admin, value, offset, header.admin_count() as usize)?;
-
-        const U64_SIZE: usize = size_of::<u64>();
-        let slice: [u8; U64_SIZE] = (&value[offset..offset + U64_SIZE]).try_into()?;
-        let raw_graph_id = transmute!(slice);
-        let edge_bins = GraphId::try_from_id(raw_graph_id)?;
+        let slice: [u8; U64_SIZE] = (&buffer[0..U64_SIZE]).try_into()?;
+        let raw_graph_id: U64<LE> = transmute!(slice);
+        let edge_bins = GraphId::try_from_id(raw_graph_id.get())?;
 
         Ok(Self {
             memory: bytes,
@@ -330,7 +353,7 @@ impl TryFrom<Bytes> for GraphTile<'_> {
 const TEST_GRAPH_TILE_ID: GraphId = unsafe { GraphId::from_components_unchecked(0, 3015, 0) };
 
 #[cfg(test)]
-static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
+static TEST_GRAPH_TILE: LazyLock<OwnedGraphTile> = LazyLock::new(|| {
     let relative_path = TEST_GRAPH_TILE_ID
         .file_path("gph")
         .expect("Unable to get relative path");
@@ -338,9 +361,9 @@ static TEST_GRAPH_TILE: LazyLock<GraphTile> = LazyLock::new(|| {
         .join("fixtures")
         .join("andorra-tiles")
         .join(relative_path);
-    let bytes = Bytes::from(std::fs::read(path).expect("Unable to read file"));
+    let bytes = std::fs::read(path).expect("Unable to read file");
 
-    GraphTile::try_from(bytes).expect("Unable to get tile")
+    OwnedGraphTile::try_from(bytes).expect("Unable to get tile")
 });
 
 #[cfg(test)]
@@ -351,7 +374,8 @@ mod tests {
 
     #[test]
     fn test_get_opp_edge_index() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count()))
             .map(|index| {
@@ -364,12 +388,17 @@ mod tests {
                 opp_edge_index
             })
             .collect();
-        insta::assert_debug_snapshot!(edges);
+
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(edges);
+        }
     }
 
     #[test]
     fn test_get_access_restrictions() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         let mut found_restriction_count = 0;
         let mut found_partial_subset_count = 0;
@@ -411,7 +440,9 @@ mod tests {
     #[test]
     fn test_edge_bins() {
         // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
+
         assert_eq!(tile.edge_bins.level(), 0);
         assert_eq!(tile.edge_bins.tile_id(), 0);
         assert_eq!(tile.edge_bins.index(), 32000);
@@ -419,20 +450,30 @@ mod tests {
 
     #[test]
     fn test_edge_info() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
+
         let first_edge_info = tile
             .get_edge_info(&tile.directed_edges[0])
             .expect("Unable to get edge info.");
-        insta::assert_debug_snapshot!("first_edge_info", first_edge_info);
-        insta::assert_debug_snapshot!("first_edge_info_decoded_shape", first_edge_info.shape());
-        insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
+
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("first_edge_info", first_edge_info);
+            insta::assert_debug_snapshot!("first_edge_info_decoded_shape", first_edge_info.shape());
+            insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
+        }
 
         assert_eq!(first_edge_info.way_id(), 0);
 
         let last_edge_info = tile
             .get_edge_info(&tile.directed_edges.last().unwrap())
             .expect("Unable to get edge info.");
-        insta::assert_debug_snapshot!("last_edge_info", last_edge_info);
+
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("last_edge_info", last_edge_info);
+        }
 
         assert_eq!(last_edge_info.way_id(), 247995246);
 
@@ -440,8 +481,12 @@ mod tests {
         let other_edge_info = tile
             .get_edge_info(&tile.directed_edges[2000])
             .expect("Unable to get edge info.");
-        insta::assert_debug_snapshot!("other_edge_info", other_edge_info);
-        insta::assert_debug_snapshot!("other_edge_info_names", other_edge_info.get_names());
+
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("other_edge_info", other_edge_info);
+            insta::assert_debug_snapshot!("other_edge_info_names", other_edge_info.get_names());
+        }
 
         assert_eq!(other_edge_info.way_id(), 28833880);
     }

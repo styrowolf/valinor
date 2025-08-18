@@ -2,17 +2,22 @@ use crate::{AsCowStr, BIN_COUNT, GraphId};
 use bitfield_struct::bitfield;
 use geo::{Coord, coord};
 use std::borrow::Cow;
-use zerocopy_derive::FromBytes;
+use zerocopy::{F32, LE, U16, U32, U64};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
 /// Remaining variable offset slots for growth.
 /// See valhalla/balder/graphtileheader.h for details.
 const EMPTY_SLOTS: usize = 11;
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FirstBitfield {
-    #[bits(46)]
-    graph_id: u64,
+    #[bits(46, from = crate::conv_u64le::from_inner, into = crate::conv_u64le::into_inner)]
+    graph_id: U64<LE>,
     #[bits(4)]
     density: u8,
     #[bits(4)]
@@ -31,15 +36,19 @@ struct FirstBitfield {
     has_ext_directed_edge: u8,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SecondBitfield {
-    #[bits(21)]
-    node_count: u32,
-    #[bits(21)]
-    directed_edge_count: u32,
-    #[bits(21)]
-    predicted_speeds_count: u32,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    node_count: U32<LE>,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    directed_edge_count: U32<LE>,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    predicted_speeds_count: U32<LE>,
     #[bits(1)]
     _spare: u8,
 }
@@ -48,62 +57,82 @@ struct SecondBitfield {
 // between x86 and amd64 architectures.
 // This was entirely accidental upstream and will eventually be cleaned up in v4.
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct TransitionCountBitfield {
-    #[bits(22)]
-    transition_count: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    transition_count: U32<LE>,
     // Deprecated; scheduled for deletion in v4
     #[bits(10)]
-    _spare: u16,
+    _spare: U16<LE>,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct TurnLaneCountBitfield {
-    #[bits(21)]
-    turn_lane_count: u32,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    turn_lane_count: U32<LE>,
     #[bits(11)]
     _spare: u16,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct TransitRecordBitfield {
-    #[bits(16)]
-    transfer_count: u32,
+    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    transfer_count: U16<LE>,
     #[bits(7)]
-    _spare: u16,
-    #[bits(24)]
-    departure_count: u32,
-    #[bits(16)]
-    stop_count: u16,
+    _spare: U8<LE>,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    departure_count: U32<LE>,
+    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    stop_count: U16<LE>,
     #[bits(1)]
     _spare: u8,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct MiscCountsBitFieldOne {
-    #[bits(12)]
-    route_count: u16,
-    #[bits(12)]
-    schedule_count: u16,
-    #[bits(24)]
-    sign_count: u32,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    route_count: U16<LE>,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    schedule_count: U16<LE>,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    sign_count: U32<LE>,
     #[bits(16)]
-    _spare: u16,
+    _spare: Ui6<LE>,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct MiscCountsBitFieldTwo {
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    access_restriction_count: U32<LE>,
+    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    admin_count: U16<LE>,
     #[bits(24)]
-    access_restriction_count: u32,
-    #[bits(16)]
-    admin_count: u16,
-    #[bits(24)]
-    _spare: u32,
+    _spare: U32<LE>,
 }
 
 // TODO: Unsure if packed is needed as well.
@@ -113,14 +142,14 @@ struct MiscCountsBitFieldTwo {
 /// This contains metadata like version,
 /// number of nodes and edges,
 /// and pointer offsets to other data.
-#[derive(Copy, Clone, FromBytes, Debug)]
+#[derive(Copy, Clone, FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct GraphTileHeader {
     bit_field_1: FirstBitfield,
-    base_lon_lat: [f32; 2],
+    base_lon_lat: [F32<LE>; 2],
     version: [u8; 16],
     /// The dataset ID (canonically, the last OSM changeset ID).
-    pub dataset_id: u64,
+    pub dataset_id: U64<LE>,
     bit_field_2: SecondBitfield,
     transition_count_bitfield: TransitionCountBitfield,
     turn_lane_count_bitfield: TurnLaneCountBitfield,
@@ -130,26 +159,27 @@ pub struct GraphTileHeader {
     /// These can be used for custom information.
     /// As long as the size of the header and order of the date of the structure doesn't change,
     /// this should be backward compatible.
-    pub reserved: u128,
+    _reserved_1: U64<LE>,
+    _reserved_2: U64<LE>,
     // TODO: Valhalla has the unhelpful comment "Offset to the beginning of the variable sized data."
     // We should improve these.
-    pub complex_restriction_forward_offset: u32,
-    pub complex_restriction_reverse_offset: u32,
-    pub edge_info_offset: u32,
-    pub text_list_offset: u32,
+    pub complex_restriction_forward_offset: U32<LE>,
+    pub complex_restriction_reverse_offset: U32<LE>,
+    pub edge_info_offset: U32<LE>,
+    pub text_list_offset: U32<LE>,
     /// The date the tile was created (since pivot date).
     /// TODO: Figure out what pivot date means; probably hide the raw value
-    pub create_date: u32,
+    pub create_date: U32<LE>,
     /// Offsets for each bin of the grid (for search/lookup)
-    pub bin_offsets: [u32; BIN_COUNT as usize],
+    pub bin_offsets: [U32<LE>; BIN_COUNT],
     /// Offset to the beginning of the variable sized data.
-    pub lane_connectivity_offset: u32,
+    pub lane_connectivity_offset: U32<LE>,
     /// Offset to the beginning of the variable sized data.
-    pub predicted_speeds_offset: u32,
+    pub predicted_speeds_offset: U32<LE>,
     /// The size of the tile (in bytes)
-    pub tile_size: u32,
+    pub tile_size: U32<LE>,
     /// See valhalla/balder/graphtileheader.h for details.
-    _empty_slots: [u32; EMPTY_SLOTS],
+    _empty_slots: [U32<LE>; EMPTY_SLOTS],
 }
 
 impl GraphTileHeader {
@@ -158,7 +188,7 @@ impl GraphTileHeader {
     pub const fn graph_id(&self) -> GraphId {
         // Safety: We know that the bit field cannot contain a value
         // larger than the max allowed value.
-        unsafe { GraphId::from_id_unchecked(self.bit_field_1.graph_id()) }
+        unsafe { GraphId::from_id_unchecked(self.bit_field_1.graph_id().get()) }
     }
 
     /// The relative road density within this tile (0-15).
@@ -200,7 +230,7 @@ impl GraphTileHeader {
     /// The coordinate of the southwest corner of this graph tile.
     #[inline]
     pub const fn sw_corner(&self) -> Coord<f32> {
-        coord! {x: self.base_lon_lat[0], y: self.base_lon_lat[1]}
+        coord! {x: self.base_lon_lat[0].get(), y: self.base_lon_lat[1].get()}
     }
 
     /// Gets the version of Baldr used to generate this graph tile.
@@ -210,79 +240,81 @@ impl GraphTileHeader {
 
     #[inline]
     pub const fn node_count(&self) -> u32 {
-        self.bit_field_2.node_count()
+        self.bit_field_2.node_count().get()
     }
 
     /// The number of directed edges in this graph tile.
     #[inline]
     pub const fn directed_edge_count(&self) -> u32 {
-        self.bit_field_2.directed_edge_count()
+        self.bit_field_2.directed_edge_count().get()
     }
 
     /// The number of predicted speed records in this graph tile.
     #[inline]
     pub const fn predicted_speeds_count(&self) -> u32 {
-        self.bit_field_2.predicted_speeds_count()
+        self.bit_field_2.predicted_speeds_count().get()
     }
 
     /// The number of node transitions in this graph tile.
     #[inline]
     pub const fn transition_count(&self) -> u32 {
-        self.transition_count_bitfield.transition_count()
+        self.transition_count_bitfield.transition_count().get()
     }
 
     /// The number of turn lanes in this graph tile.
     #[inline]
     pub const fn turn_lane_count(&self) -> u32 {
-        self.turn_lane_count_bitfield.turn_lane_count()
+        self.turn_lane_count_bitfield.turn_lane_count().get()
     }
 
     /// The number of transit transfers in this graph tile.
     #[inline]
-    pub const fn transfer_count(&self) -> u32 {
-        self.transit_record_bitfield.transfer_count()
+    pub const fn transfer_count(&self) -> u16 {
+        self.transit_record_bitfield.transfer_count().get()
     }
 
     /// The number of transit departures in this graph tile.
     #[inline]
     pub const fn departure_count(&self) -> u32 {
-        self.transit_record_bitfield.departure_count()
+        self.transit_record_bitfield.departure_count().get()
     }
 
     /// The number of transit stops in this graph tile.
     #[inline]
     pub const fn stop_count(&self) -> u16 {
-        self.transit_record_bitfield.stop_count()
+        self.transit_record_bitfield.stop_count().get()
     }
 
     /// The number of transit routes in this graph tile.
     #[inline]
     pub const fn route_count(&self) -> u16 {
-        self.misc_counts_bit_field_one.route_count()
+        self.misc_counts_bit_field_one.route_count().get()
     }
 
     /// The number of transit schedules in this graph tile.
     #[inline]
     pub const fn schedule_count(&self) -> u16 {
-        self.misc_counts_bit_field_one.schedule_count()
+        self.misc_counts_bit_field_one.schedule_count().get()
     }
 
     /// The number of signs in this graph tile.
     #[inline]
     pub const fn sign_count(&self) -> u32 {
-        self.misc_counts_bit_field_one.sign_count()
+        self.misc_counts_bit_field_one.sign_count().get()
     }
 
     /// The number of access restrictions in this graph tile.
     #[inline]
     pub const fn access_restriction_count(&self) -> u32 {
-        self.misc_counts_bit_field_two.access_restriction_count()
+        self.misc_counts_bit_field_two
+            .access_restriction_count()
+            .get()
     }
 
     /// The number of admin records in this graph tile.
     #[inline]
     pub const fn admin_count(&self) -> u16 {
-        self.misc_counts_bit_field_two.admin_count()
+        self.misc_counts_bit_field_two.admin_count().get()
     }
 }
 
@@ -292,8 +324,12 @@ mod test {
 
     #[test]
     fn test_parse_header() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!(tile.header);
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(tile.header);
+        }
     }
 }

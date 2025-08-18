@@ -4,18 +4,30 @@ expression: "tile.directed_edges[0]"
 ---
 DirectedEdge {
     first_bitfield: FirstBitfield {
-        end_node: 7985978936,
+        end_node: U64(
+            7985978936,
+        ),
         restrictions: 0,
-        opposing_edge_index: 0,
+        opposing_edge_index: U32(
+            0,
+        ),
         forward: 1,
         leaves_tile: 0,
         country_crossing: 0,
     },
     second_bitfield: SecondBitfield {
-        edge_info_offset: 0,
-        access_restrictions: 0,
-        start_restriction: 0,
-        end_restriction: 0,
+        edge_info_offset: U32(
+            0,
+        ),
+        access_restrictions: U16(
+            0,
+        ),
+        start_restriction: U16(
+            0,
+        ),
+        end_restriction: U16(
+            0,
+        ),
         complex_restriction: 0,
         dest_only: 0,
         no_thru: 0,
@@ -37,8 +49,12 @@ DirectedEdge {
         has_predicted_speed: 0,
     },
     fourth_bitfield: FourthBitfield {
-        forward_access: 2031,
-        reverse_access: 258,
+        forward_access: U16(
+            2031,
+        ),
+        reverse_access: U16(
+            258,
+        ),
         max_up_slope: 0,
         max_down_slope: 0,
         sac_scale: 0,
@@ -67,9 +83,13 @@ DirectedEdge {
         is_dest_only_hgv: 0,
     },
     fifth_bitfield: FifthBitfield {
-        turn_type: 2692,
+        turn_type: U32(
+            2692,
+        ),
         edge_to_left: 7,
-        length: 630,
+        length: U32(
+            630,
+        ),
         weighted_grade: 6,
         curvature: 7,
     },

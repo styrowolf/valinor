@@ -4,8 +4,12 @@ expression: tile.admins
 ---
 [
     Admin {
-        country_name_offset: 1,
-        principal_subdivision_offset: 1,
+        country_name_offset: U32(
+            1,
+        ),
+        principal_subdivision_offset: U32(
+            1,
+        ),
         country_iso: [
             0,
             0,
@@ -15,10 +19,19 @@ expression: tile.admins
             0,
             0,
         ],
+        _spare: [
+            0,
+            0,
+            0,
+        ],
     },
     Admin {
-        country_name_offset: 6,
-        principal_subdivision_offset: 0,
+        country_name_offset: U32(
+            6,
+        ),
+        principal_subdivision_offset: U32(
+            0,
+        ),
         country_iso: [
             65,
             68,
@@ -28,10 +41,19 @@ expression: tile.admins
             0,
             0,
         ],
+        _spare: [
+            0,
+            0,
+            0,
+        ],
     },
     Admin {
-        country_name_offset: 72,
-        principal_subdivision_offset: 80,
+        country_name_offset: U32(
+            72,
+        ),
+        principal_subdivision_offset: U32(
+            80,
+        ),
         country_iso: [
             69,
             83,
@@ -41,10 +63,19 @@ expression: tile.admins
             84,
             0,
         ],
+        _spare: [
+            0,
+            0,
+            0,
+        ],
     },
     Admin {
-        country_name_offset: 851,
-        principal_subdivision_offset: 858,
+        country_name_offset: U32(
+            851,
+        ),
+        principal_subdivision_offset: U32(
+            858,
+        ),
         country_iso: [
             70,
             82,
@@ -53,6 +84,11 @@ expression: tile.admins
             79,
             67,
             67,
+        ],
+        _spare: [
+            0,
+            0,
+            0,
         ],
     },
 ]

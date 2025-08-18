@@ -2,7 +2,8 @@ use crate::{Access, GraphId};
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
 use geo::{Coord, coord};
-use zerocopy_derive::FromBytes;
+use zerocopy::{LE, U16, U32, U64};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
 const NODE_ELEVATION_PRECISION: f32 = 0.25;
 const MIN_ELEVATION: f32 = -500.0;
@@ -10,32 +11,40 @@ const MIN_ELEVATION: f32 = -500.0;
 const MAX_LOCAL_EDGE_INDEX: u8 = 7;
 const HEADING_EXPAND_FACTOR: f32 = 359f32 / 255f32;
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FirstBitfield {
-    #[bits(22)]
-    lat_offset: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    lat_offset: U32<LE>,
     #[bits(4)]
     lat_offset7: u8,
-    #[bits(22)]
-    lon_offset: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    lon_offset: U32<LE>,
     #[bits(4)]
     lon_offset7: u8,
-    #[bits(12)]
-    access: u16,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    access: U16<LE>,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SecondBitfield {
-    #[bits(21)]
-    edge_index: u32,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    edge_index: U32<LE>,
     #[bits(7)]
     edge_count: u8,
-    #[bits(12)]
-    admin_index: u16,
-    #[bits(9)]
-    time_zone_index: u16,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    admin_index: U16<LE>,
+    #[bits(9, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    time_zone_index: U16<LE>,
     #[bits(4)]
     intersection_type: u8,
     #[bits(4)]
@@ -52,15 +61,19 @@ struct SecondBitfield {
     is_named_intersection: u8,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct ThirdBitfield {
-    #[bits(21)]
-    transition_index: u32,
+    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    transition_index: U32<LE>,
     #[bits(3)]
     transition_count: u8,
-    #[bits(16)]
-    local_driveability: u16,
+    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    local_driveability: U16<LE>,
     #[bits(3)]
     local_edge_count: u8,
     // Booleans represented this way for infailability.
@@ -73,11 +86,11 @@ struct ThirdBitfield {
     private_access: u8,
     #[bits(1)]
     is_cash_only_toll: u8,
-    #[bits(15)]
-    elevation: u16,
+    #[bits(15, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    elevation: U16<LE>,
     // For compatibility when new time zones are added
-    #[bits(1)]
-    time_zone_ext: u16,
+    #[bits(1, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    time_zone_ext: U16<LE>,
     #[bits(1)]
     _spare: u8,
 }
@@ -87,7 +100,7 @@ struct ThirdBitfield {
 /// The graph uses a forward star structure,
 /// where nodes point to the first outbound directed edge,
 /// and each directed edge points to the other end node of the edge.
-#[derive(FromBytes, Debug)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct NodeInfo {
     first_bit_field: FirstBitfield,
@@ -103,20 +116,24 @@ pub struct NodeInfo {
     /// Also for transit levels (while building data only) it can be used for either the connecting way
     /// id for matching the connection point of the station to the edge or an encoded lon lat pair for
     /// the exact connection point. If the highest bit is set it's a lon lat otherwise it's a way id
-    headings: u64,
+    headings: U64<LE>,
 }
 
-#[derive(FromBytes)]
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 pub struct NodeTransition {
-    #[bits(46)]
-    end_node_id: u64,
+    #[bits(46, from = crate::conv_u64le::from_inner, into = crate::conv_u64le::into_inner)]
+    end_node_id: U64<LE>,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
     up: u8,
     #[bits(17)]
-    _spare: u32,
+    _spare: U32<LE>,
 }
 
 impl NodeTransition {
@@ -124,7 +141,7 @@ impl NodeTransition {
     #[inline]
     pub const fn corresponding_end_node_id(&self) -> GraphId {
         // Safety: We know that this value cannot be larger than 46 bits.
-        unsafe { GraphId::from_id_unchecked(self.end_node_id()) }
+        unsafe { GraphId::from_id_unchecked(self.end_node_id().get()) }
     }
 
     /// Is the transition up to a higher level?
@@ -147,9 +164,9 @@ impl NodeInfo {
         // on storage of vast numbers of coordinates.
         // We also know the sw_corner resolution doesn't require f64.
         // But we still do all the internal math in f64 for better precision.
-        let lat_offset = f64::from(self.first_bit_field.lat_offset()) * 1e-6f64
+        let lat_offset = f64::from(self.first_bit_field.lat_offset().get()) * 1e-6f64
             + f64::from(self.first_bit_field.lat_offset7()) * 1e-7f64;
-        let lon_offset = f64::from(self.first_bit_field.lon_offset()) * 1e-6f64
+        let lon_offset = f64::from(self.first_bit_field.lon_offset().get()) * 1e-6f64
             + f64::from(self.first_bit_field.lon_offset7()) * 1e-7f64;
         sw_corner + coord! {x: lon_offset as f32, y: lat_offset as f32}
     }
@@ -159,13 +176,13 @@ impl NodeInfo {
     pub fn access(&self) -> EnumSet<Access> {
         // TODO: Look at ways to do this with FromBytes; this currently copies
         // Safety: The access bits are length 12, so invalid representations are impossible.
-        unsafe { EnumSet::from_repr_unchecked(self.first_bit_field.access()) }
+        unsafe { EnumSet::from_repr_unchecked(self.first_bit_field.access().get()) }
     }
 
     /// The index within the node's tile of its first outbound directed edge.
     #[inline]
     pub const fn edge_index(&self) -> u32 {
-        self.second_bit_field.edge_index()
+        self.second_bit_field.edge_index().get()
     }
 
     /// The number of outbound edges (on this level).
@@ -177,7 +194,7 @@ impl NodeInfo {
     /// The index of the admin region containing this node (in the tile's admin list).
     #[inline]
     pub const fn admin_index(&self) -> u16 {
-        self.second_bit_field.admin_index()
+        self.second_bit_field.admin_index().get()
     }
 
     /// The node's time zone index.
@@ -185,7 +202,8 @@ impl NodeInfo {
     /// TODO: Valhalla doesn't document this well, and admits as such in nodeinfo.h
     #[inline]
     pub const fn time_zone_index(&self) -> u16 {
-        self.second_bit_field.time_zone_index() | (self.third_bit_field.time_zone_ext() << 9)
+        self.second_bit_field.time_zone_index().get()
+            | (self.third_bit_field.time_zone_ext().get() << 9)
     }
 
     /// The type of intersection.
@@ -236,7 +254,7 @@ impl NodeInfo {
     /// [`GraphTile`](super::GraphTile).
     #[inline]
     pub const fn transition_index(&self) -> u32 {
-        self.third_bit_field.transition_index()
+        self.third_bit_field.transition_index().get()
     }
 
     /// The number of transitions from this node
@@ -295,7 +313,8 @@ impl NodeInfo {
     /// The elevation at the node (in meters).
     #[inline]
     pub fn elevation(&self) -> f32 {
-        MIN_ELEVATION + (NODE_ELEVATION_PRECISION * f32::from(self.third_bit_field.elevation()))
+        MIN_ELEVATION
+            + (NODE_ELEVATION_PRECISION * f32::from(self.third_bit_field.elevation().get()))
     }
 
     /// Gets the heading of the local edge index,
@@ -311,7 +330,8 @@ impl NodeInfo {
             let shift = u64::from(local_edge_index) * 8;
             #[allow(clippy::cast_possible_truncation)]
             Some(
-                (((self.headings & (255u64 << shift)) >> shift) as f32 * HEADING_EXPAND_FACTOR)
+                (((self.headings & (255u64 << shift)) >> shift).get() as f32
+                    * HEADING_EXPAND_FACTOR)
                     .round() as u16,
             )
         }
@@ -325,17 +345,22 @@ mod test {
 
     #[test]
     fn test_parse_nodes_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(tile.nodes.len(), tile.header.node_count() as usize);
     }
 
     #[test]
     fn test_parse_nodes() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!("first_node", tile.nodes[0]);
-        insta::assert_debug_snapshot!("last_node", tile.nodes.last().unwrap());
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("first_node", tile.nodes[0]);
+            insta::assert_debug_snapshot!("last_node", tile.nodes.last().unwrap());
+        }
 
         // Sanity check our coordinate parsing
         let coord = tile.nodes[0].coordinate(tile.header.sw_corner());
@@ -350,7 +375,8 @@ mod test {
 
     #[test]
     fn test_parse_transitions_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(
             tile.transitions.len(),
@@ -360,9 +386,13 @@ mod test {
 
     #[test]
     fn test_parse_transitions() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!("first_transition", tile.transitions[0]);
-        insta::assert_debug_snapshot!("last_transition", tile.transitions.last().unwrap());
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("first_transition", tile.transitions[0]);
+            insta::assert_debug_snapshot!("last_transition", tile.transitions.last().unwrap());
+        }
     }
 }

@@ -4,15 +4,22 @@ use enumset::EnumSet;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use std::fmt::{Debug, Formatter};
+use zerocopy::{LE, U16, U32, U64};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FirstBitfield {
-    #[bits(46)]
-    end_node: u64,
+    #[bits(46, from = crate::conv_u64le::from_inner, into = crate::conv_u64le::into_inner)]
+    end_node: U64<LE>,
     #[bits(8)]
     restrictions: u8,
-    #[bits(7)]
-    opposing_edge_index: u32,
+    #[bits(7, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    opposing_edge_index: U32<LE>,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
@@ -23,16 +30,21 @@ struct FirstBitfield {
     country_crossing: u8,
 }
 
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SecondBitfield {
-    #[bits(25)]
-    edge_info_offset: u32,
-    #[bits(12)]
-    access_restrictions: u16, // TODO: type?
-    #[bits(12)]
-    start_restriction: u16, // TODO: type?
-    #[bits(12)]
-    end_restriction: u16, // TODO: type?
+    #[bits(25, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    edge_info_offset: U32<LE>,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    access_restrictions: U16<LE>,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    start_restriction: U16<LE>,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    end_restriction: U16<LE>,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
@@ -43,7 +55,12 @@ struct SecondBitfield {
     no_thru: u8,
 }
 
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct ThirdBitfield {
     #[bits(8)]
     speed: u8,
@@ -77,12 +94,17 @@ struct ThirdBitfield {
     has_predicted_speed: u8,
 }
 
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FourthBitfield {
-    #[bits(12)]
-    forward_access: u16,
-    #[bits(12)]
-    reverse_access: u16,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    forward_access: U16<LE>,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    reverse_access: U16<LE>,
     #[bits(5)]
     max_up_slope: u8,
     #[bits(5)]
@@ -141,24 +163,34 @@ struct FourthBitfield {
     _spare: u8,
 }
 
-#[bitfield(u64)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct FifthBitfield {
-    #[bits(24)]
-    turn_type: u32,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    turn_type: U32<LE>,
     #[bits(8)]
     edge_to_left: u8,
-    #[bits(24)]
-    length: u32,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    length: U32<LE>,
     #[bits(4)]
     weighted_grade: u8,
     #[bits(4)]
     curvature: u8,
 }
 
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct StopImpact {
-    #[bits(24)]
-    impact_between_edges: u32,
+    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    impact_between_edges: U32<LE>,
     #[bits(8)]
     edge_to_right: u8,
 }
@@ -167,12 +199,18 @@ struct StopImpact {
 /// Since transit lines are schedule-based, they have no need for edge transition logic,
 /// so we can freely share this field.
 #[repr(C)]
+#[derive(FromBytes, Immutable, Unaligned)]
 union StopOrLine {
     stop_impact: StopImpact,
-    line_id: u32,
+    line_id: U32<LE>,
 }
 
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct SeventhBitField {
     #[bits(7)]
     local_level_edge_index: u8,
@@ -209,7 +247,7 @@ impl Debug for StopOrLine {
 /// Additional details can be found in the [`EdgeInfo`] struct,
 /// which contains things like the encoded shape, OSM way ID,
 /// and other info that is not necessary for making routing decisions.
-#[derive(Debug)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct DirectedEdge {
     first_bitfield: FirstBitfield,
@@ -228,7 +266,7 @@ impl DirectedEdge {
     #[inline]
     pub const fn end_node_id(&self) -> GraphId {
         // Safety: We know the number of bits is limited
-        unsafe { GraphId::from_id_unchecked(self.first_bitfield.end_node()) }
+        unsafe { GraphId::from_id_unchecked(self.first_bitfield.end_node().get()) }
     }
 
     /// Gets the index of the opposing directed edge at the end node of this directed edge.
@@ -236,7 +274,7 @@ impl DirectedEdge {
     /// Can be used to find the start node of this directed edge.
     #[inline]
     pub const fn opposing_edge_index(&self) -> u32 {
-        self.first_bitfield.opposing_edge_index()
+        self.first_bitfield.opposing_edge_index().get()
     }
 
     /// Is this edge a shortcut?
@@ -248,7 +286,7 @@ impl DirectedEdge {
     /// Gets the offset into the variable sized edge info field.
     #[inline]
     pub const fn edge_info_offset(&self) -> u32 {
-        self.second_bitfield.edge_info_offset()
+        self.second_bitfield.edge_info_offset().get()
     }
 
     /// Is the edge info forward or reverse?
@@ -392,7 +430,7 @@ impl DirectedEdge {
     #[inline]
     pub fn forward_access(&self) -> EnumSet<Access> {
         // Safety: The access bits are length 12, so invalid representations are impossible.
-        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.forward_access()) }
+        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.forward_access().get()) }
     }
 
     /// Gets the reverse access modes.
@@ -401,7 +439,7 @@ impl DirectedEdge {
     #[inline]
     pub fn reverse_access(&self) -> EnumSet<Access> {
         // Safety: The access bits are length 12, so invalid representations are impossible.
-        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access()) }
+        unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access().get()) }
     }
 }
 
@@ -424,13 +462,16 @@ impl Serialize for DirectedEdge {
 
         state.serialize_field(
             "access_restrictions",
-            &self.second_bitfield.access_restrictions(),
+            &self.second_bitfield.access_restrictions().get(),
         )?;
         state.serialize_field(
             "start_restriction",
-            &self.second_bitfield.start_restriction(),
+            &self.second_bitfield.start_restriction().get(),
         )?;
-        state.serialize_field("end_restriction", &self.second_bitfield.end_restriction())?;
+        state.serialize_field(
+            "end_restriction",
+            &self.second_bitfield.end_restriction().get(),
+        )?;
         state.serialize_field(
             "complex_restriction",
             &self.second_bitfield.complex_restriction(),
@@ -482,9 +523,9 @@ impl Serialize for DirectedEdge {
 /// This structure provides the ability to add extra
 /// attributes to directed edges without breaking backward compatibility.
 /// For now this structure is unused
-#[derive(Debug)]
 #[repr(C)]
-pub struct DirectedEdgeExt(u64);
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
+pub struct DirectedEdgeExt(U64<LE>);
 
 #[cfg(test)]
 mod test {
@@ -492,7 +533,8 @@ mod test {
 
     #[test]
     fn test_parse_directed_edges_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(
             tile.directed_edges.len(),
@@ -502,10 +544,17 @@ mod test {
 
     #[test]
     fn test_parse_nodes() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!("first_directed_edge", tile.directed_edges[0]);
-        insta::assert_debug_snapshot!("last_directed_edge", tile.directed_edges.last().unwrap());
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("first_directed_edge", tile.directed_edges[0]);
+            insta::assert_debug_snapshot!(
+                "last_directed_edge",
+                tile.directed_edges.last().unwrap()
+            );
+        }
 
         // TODO: Other sanity checks after we add some more advanced methods
     }

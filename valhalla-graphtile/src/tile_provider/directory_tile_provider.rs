@@ -1,16 +1,17 @@
+use crate::GraphId;
+use crate::graph_tile::OwnedGraphTile;
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
-use crate::{GraphId, graph_tile::GraphTile};
-use bytes::Bytes;
 use lru::LruCache;
 use std::cell::RefCell;
 use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 pub struct DirectoryTileProvider {
     base_directory: PathBuf,
     // TODO: This is SUPER hackish for now...
-    lru_cache: RefCell<LruCache<GraphId, Bytes>>,
+    lru_cache: RefCell<LruCache<GraphId, Rc<OwnedGraphTile>>>,
 }
 
 impl DirectoryTileProvider {
@@ -26,12 +27,12 @@ impl GraphTileProvider for DirectoryTileProvider {
     fn get_tile_containing(
         &self,
         graph_id: &GraphId,
-    ) -> Result<GraphTile<'_>, GraphTileProviderError> {
+    ) -> Result<Rc<OwnedGraphTile>, GraphTileProviderError> {
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
         let mut cache = self.lru_cache.borrow_mut();
-        let data = cache
+        let tile = cache
             .try_get_or_insert(base_graph_id, || {
                 let path = self.base_directory.join(base_graph_id.file_path("gph")?);
                 // Open the file and read all bytes into a buffer
@@ -40,12 +41,13 @@ impl GraphTileProvider for DirectoryTileProvider {
                     ErrorKind::NotFound => GraphTileProviderError::TileDoesNotExist,
                     _ => GraphTileProviderError::IoError(e),
                 })?;
-                Ok::<Bytes, GraphTileProviderError>(Bytes::from(data))
+                let tile = OwnedGraphTile::try_from(data)?;
+                Ok::<_, GraphTileProviderError>(Rc::new(tile))
             })
             .cloned()?;
 
         // Construct a graph tile with the bytes
-        Ok(GraphTile::try_from(data)?)
+        Ok(tile)
     }
 }
 
@@ -68,9 +70,10 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = provider
+        let owned_tile = provider
             .get_tile_containing(&graph_id)
             .expect("Unable to get tile");
+        let tile = owned_tile.as_tile();
 
         // Minimally test that we got the correct tile
         assert_eq!(tile.header.graph_id(), graph_id);
@@ -86,9 +89,10 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = provider
+        let owned_tile = provider
             .get_tile_containing(&graph_id)
             .expect("Unable to get tile");
+        let tile = owned_tile.as_tile();
 
         // Cross-check the default implementation of the opposing edge ID function.
         // We only check a subset because it takes too long otherwise.

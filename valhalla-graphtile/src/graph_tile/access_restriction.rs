@@ -1,7 +1,8 @@
 use crate::Access;
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use zerocopy_derive::TryFromBytes;
+use zerocopy::{LE, U16, U32, U64};
+use zerocopy_derive::{FromBytes, Immutable, TryFromBytes, Unaligned};
 
 /// Types of access restrictions.
 #[derive(TryFromBytes, Debug, Eq, PartialEq)]
@@ -45,32 +46,36 @@ impl AccessRestrictionType {
     }
 }
 
-#[bitfield(u64)]
-#[derive(PartialEq, Eq, TryFromBytes)]
+#[bitfield(u64,
+    repr = U64<LE>,
+    from = crate::conv_u64le::from_inner,
+    into = crate::conv_u64le::into_inner
+)]
+#[derive(PartialEq, Eq, FromBytes, Immutable, Unaligned)]
 struct AccessRestrictionBitField {
-    #[bits(22)]
-    edge_index: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    edge_index: U32<LE>,
     #[bits(6)]
     restriction_type: AccessRestrictionType,
-    #[bits(12)]
-    modes: u16,
+    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    modes: U16<LE>,
     #[bits(24)]
-    _spare: u32,
+    _spare: U32<LE>,
 }
 
 /// Access restrictions beyond the usual access tags
-#[derive(PartialEq, Eq, TryFromBytes, Debug)]
+#[derive(PartialEq, Eq, FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct AccessRestriction {
     bitfield: AccessRestrictionBitField,
-    value: u64,
+    value: U64<LE>,
 }
 
 impl AccessRestriction {
     /// Gets the edge index (within the tile) to which the restriction applies.
     #[inline]
     pub fn edge_index(&self) -> u32 {
-        self.bitfield.edge_index()
+        self.bitfield.edge_index().get()
     }
 
     /// Gets the type of access restriction.
@@ -84,7 +89,7 @@ impl AccessRestriction {
     pub fn affected_access_modes(&self) -> EnumSet<Access> {
         // TODO: Look at ways to do this with FromBytes; this currently copies
         // Safety: The access bits are length 12, so invalid representations are impossible.
-        unsafe { EnumSet::from_repr_unchecked(self.bitfield.modes()) }
+        unsafe { EnumSet::from_repr_unchecked(self.bitfield.modes().get()) }
     }
 }
 
@@ -96,7 +101,8 @@ mod tests {
 
     #[test]
     fn test_parse_access_restrictions_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(
             tile.access_restrictions.len(),
@@ -106,9 +112,13 @@ mod tests {
 
     #[test]
     fn test_parse_access_restrictions() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!("first_access_restriction", tile.access_restrictions[0]);
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!("first_access_restriction", tile.access_restrictions[0]);
+        }
 
         assert_eq!(
             tile.access_restrictions[0].restriction_type(),
@@ -119,10 +129,12 @@ mod tests {
             EnumSet::from(Access::Truck)
         );
 
-        insta::assert_debug_snapshot!(
-            "last_access_restriction",
-            tile.access_restrictions.last().unwrap()
-        );
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(
+                "last_access_restriction",
+                tile.access_restrictions.last().unwrap()
+            );
+        }
 
         // TODO: Other sanity checks after we add some more advanced methods
     }

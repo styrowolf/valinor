@@ -1,44 +1,45 @@
-// TODO: We don't actively use transit data structures, so these are merely correctly sized stubs for now.
+//! TODO: We don't actively use transit data structures, so these are merely correctly sized stubs for now.
 
-use zerocopy_derive::FromBytes;
+use zerocopy::{LE, U32, U64};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
-#[derive(Debug, FromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TransitDeparture {
-    _bitfield1: u64,
-    _bitfield2: u64,
-    _departure_times: u64,
+    _bitfield1: U64<LE>,
+    _bitfield2: U64<LE>,
+    _departure_times: U64<LE>,
 }
 
-#[derive(FromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TransitStop {
-    _data: u64,
+    _data: U64<LE>,
 }
 
-#[derive(FromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TransitRoute {
-    _route_color: u32,
-    _route_text_color: u32,
+    _route_color: U32<LE>,
+    _route_text_color: U32<LE>,
 
-    _bitfield1: u64,
-    _bitfield2: u64,
-    _bitfield3: u64,
-    _bitfield4: u64,
+    _bitfield1: U64<LE>,
+    _bitfield2: U64<LE>,
+    _bitfield3: U64<LE>,
+    _bitfield4: U64<LE>,
 }
 
-#[derive(FromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TransitSchedule {
-    _days: u64,
-    _bitfield1: u64,
+    _days: U64<LE>,
+    _bitfield1: U64<LE>,
 }
 
-#[derive(FromBytes)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TransitTransfer {
-    from_stop_id: u32,
-    to_stop_id: u32,
-    _bitfield_1: u32,
+    from_stop_id: U32<LE>,
+    to_stop_id: U32<LE>,
+    _bitfield_1: U32<LE>,
 }

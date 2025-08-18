@@ -1,11 +1,12 @@
 use crate::GraphId;
+use std::rc::Rc;
 use thiserror::Error;
 
 // TODO: mmapped tarball version
 mod directory_tile_provider;
 
 use crate::graph_id::InvalidGraphIdError;
-use crate::graph_tile::{GraphTile, GraphTileError, LookupError, NodeInfo};
+use crate::graph_tile::{GraphTileError, LookupError, NodeInfo, OwnedGraphTile};
 pub use directory_tile_provider::DirectoryTileProvider;
 
 #[derive(Debug, Error)]
@@ -42,7 +43,7 @@ pub trait GraphTileProvider {
     fn get_tile_containing(
         &self,
         graph_id: &GraphId,
-    ) -> Result<GraphTile<'_>, GraphTileProviderError>;
+    ) -> Result<Rc<OwnedGraphTile>, GraphTileProviderError>;
 
     /// Gets the opposing edge and the tile containing it.
     ///
@@ -63,21 +64,24 @@ pub trait GraphTileProvider {
     fn get_opposing_edge(
         &self,
         graph_id: &GraphId,
-    ) -> Result<(GraphId, GraphTile<'_>), GraphTileProviderError> {
+    ) -> Result<(GraphId, Rc<OwnedGraphTile>), GraphTileProviderError> {
         let tile = self.get_tile_containing(graph_id)?;
-        let edge = tile.get_directed_edge(graph_id)?;
+        let edge = tile.as_tile().get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
         let end_node_id = edge.end_node_id();
         let opp_edge_index = edge.opposing_edge_index();
 
         // TODO: Probably a cleaner pattern here?
-        let (opp_tile, node_edge_index) = match tile.get_node(&end_node_id).map(NodeInfo::edge_index)
+        let (opp_tile, node_edge_index) = match tile
+            .as_tile()
+            .get_node(&end_node_id)
+            .map(NodeInfo::edge_index)
         {
             Ok(index) => (tile, index),
             Err(LookupError::MismatchedBase) => {
                 let tile = self.get_tile_containing(&end_node_id)?;
-                let index = tile.get_node(&end_node_id)?.edge_index();
+                let index = tile.as_tile().get_node(&end_node_id)?.edge_index();
                 (tile, index)
             }
             Err(LookupError::InvalidIndex) => return Err(LookupError::InvalidIndex)?,
@@ -95,5 +99,4 @@ pub trait GraphTileProvider {
 
         Ok((id, opp_tile))
     }
-    // TODO: Coordinate, bbox, etc. (can have implementations that are generic!!)
 }

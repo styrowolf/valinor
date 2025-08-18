@@ -1,22 +1,27 @@
 use bitfield_struct::bitfield;
-use zerocopy_derive::FromBytes;
+use zerocopy::{LE, U32};
+use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
-#[derive(FromBytes)]
-#[bitfield(u32)]
+#[bitfield(u32,
+    repr = U32<LE>,
+    from = crate::conv_u32le::from_inner,
+    into = crate::conv_u32le::into_inner
+)]
+#[derive(FromBytes, Immutable, Unaligned)]
 struct EdgeIndex {
-    #[bits(22)]
-    edge_index: u32,
+    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    edge_index: U32<LE>,
     #[bits(10)]
-    _spare: u16,
+    _spare: U16<LE>,
 }
 
-#[derive(FromBytes, Debug)]
+#[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct TurnLane {
     edge_index: EdgeIndex,
     /// The offset into the [`GraphTile`](super::GraphTile) text list
     /// which contains the text for this turn lane.
-    pub text_offset: u32,
+    pub text_offset: U32<LE>,
 }
 
 /// Holds turn lane information at the end of a directed edge.
@@ -27,7 +32,7 @@ impl TurnLane {
     /// Gets the index (within the same tile) of the directed edge that this sign applies to.
     #[inline]
     pub const fn directed_edge_index(&self) -> u32 {
-        self.edge_index.edge_index()
+        self.edge_index.edge_index().get()
     }
 }
 
@@ -37,7 +42,8 @@ mod tests {
 
     #[test]
     fn test_parse_turn_lane_count() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
         assert_eq!(
             tile.turn_lanes.len(),
@@ -47,8 +53,12 @@ mod tests {
 
     #[test]
     fn test_parse_turn_lanes() {
-        let tile = &*TEST_GRAPH_TILE;
+        let owned_tile = &*TEST_GRAPH_TILE;
+        let tile = owned_tile.as_tile();
 
-        insta::assert_debug_snapshot!(tile.turn_lanes);
+        // insta internally does a fork operation, which is not supported under Miri
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(tile.turn_lanes);
+        }
     }
 }

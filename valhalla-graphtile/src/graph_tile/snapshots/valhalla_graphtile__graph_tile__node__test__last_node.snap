@@ -4,17 +4,29 @@ expression: tile.nodes.last().unwrap()
 ---
 NodeInfo {
     first_bit_field: FirstBitfield {
-        lat_offset: 625189,
+        lat_offset: U32(
+            625189,
+        ),
         lat_offset7: 4,
-        lon_offset: 1527942,
+        lon_offset: U32(
+            1527942,
+        ),
         lon_offset7: 7,
-        access: 4095,
+        access: U16(
+            4095,
+        ),
     },
     second_bit_field: SecondBitfield {
-        edge_index: 3424,
+        edge_index: U32(
+            3424,
+        ),
         edge_count: 2,
-        admin_index: 1,
-        time_zone_index: 293,
+        admin_index: U16(
+            1,
+        ),
+        time_zone_index: U16(
+            293,
+        ),
         intersection_type: 0,
         node_type: 0,
         density: 1,
@@ -23,16 +35,26 @@ NodeInfo {
         is_named_intersection: 0,
     },
     third_bit_field: ThirdBitfield {
-        transition_index: 711,
+        transition_index: U32(
+            711,
+        ),
         transition_count: 1,
-        local_driveability: 63,
+        local_driveability: U16(
+            63,
+        ),
         local_edge_count: 2,
         drive_on_right: 1,
         tagged_access: 0,
         private_access: 0,
         is_cash_only_toll: 0,
-        elevation: 0,
-        time_zone_ext: 0,
+        elevation: U16(
+            0,
+        ),
+        time_zone_ext: U16(
+            0,
+        ),
     },
-    headings: 8642144,
+    headings: U64(
+        8642144,
+    ),
 }
