@@ -29,6 +29,9 @@ jobs:
     - name: Run tests
       run: cargo nextest run --no-fail-fast
 
+    - name: Install Miri
+      run: rustup +nightly component add miri
+
     - name: Run tests in Miri
       run: cargo +nightly miri nextest run -p valhalla-graphtile --no-fail-fast
       env:
