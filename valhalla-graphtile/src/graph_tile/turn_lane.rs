@@ -19,14 +19,14 @@ struct EdgeIndex {
 #[repr(C)]
 pub struct TurnLane {
     edge_index: EdgeIndex,
-    /// The offset into the [`GraphTile`](super::GraphTileView) text list
+    /// The offset into the graph tile text list
     /// which contains the text for this turn lane.
     pub text_offset: U32<LE>,
 }
 
 /// Holds turn lane information at the end of a directed edge.
 ///
-/// Turn lane text is stored in the [`GraphTile`](super::GraphTileView) text list
+/// Turn lane text is stored in the graph tile text list
 /// and the offset is stored within the [`TurnLane`] structure.
 impl TurnLane {
     /// Gets the index (within the same tile) of the directed edge that this sign applies to.

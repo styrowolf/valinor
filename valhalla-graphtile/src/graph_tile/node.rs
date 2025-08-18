@@ -251,7 +251,7 @@ impl NodeInfo {
 
     /// The index of the first transition from this node.
     /// This index is into the `transitions` vector on
-    /// [`GraphTile`](super::GraphTileView).
+    /// the graph tile..
     #[inline]
     pub const fn transition_index(&self) -> u32 {
         self.third_bit_field.transition_index().get()

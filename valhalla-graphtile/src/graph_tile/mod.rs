@@ -69,7 +69,7 @@ pub trait GraphTile {
     /// or the graph is invalid.
     fn may_contain_id(&self, id: GraphId) -> bool;
 
-    /// Gets a reference to the [``GraphTileHeader``](GraphTileHeader).
+    /// Gets a reference to the [`GraphTileHeader`].
     fn header(&self) -> &GraphTileHeader;
 
     /// Gets a reference to a node in this tile with the given graph ID.
@@ -92,7 +92,7 @@ pub trait GraphTile {
     ///
     /// # Errors
     ///
-    /// Returns a [``LookupError``](LookupError) if the graph ID is not present in the tile.
+    /// Returns a [`LookupError`] if the graph ID is not present in the tile.
     fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError>;
 
     /// Gets a reference to an extended directed edge in this tile by graph ID.

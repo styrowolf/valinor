@@ -244,7 +244,7 @@ impl Debug for StopOrLine {
 ///
 /// This struct contains only the essential edge information
 /// which is needed for routing calculations.
-/// Additional details can be found in the [`EdgeInfo`] struct,
+/// Additional details can be found in the [`EdgeInfo`](super::EdgeInfo) struct,
 /// which contains things like the encoded shape, OSM way ID,
 /// and other info that is not necessary for making routing decisions.
 #[derive(FromBytes, Immutable, Unaligned, Debug)]

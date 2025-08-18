@@ -1,7 +1,4 @@
-//! # Valhalla Graph Tile Manipulation
-//!
-//! This is an oxidized version of the graph tile access, manipulation, and data structures
-//! of Valhalla's `baldr` module.
+#![doc = include_str!("../README.md")]
 
 // Private modules by default
 mod graph_id;

@@ -4,7 +4,7 @@ use zerocopy_derive::{FromBytes, Immutable, TryFromBytes, Unaligned};
 
 /// Holds a generic sign with type and text.
 ///
-/// Text is stored in the [`GraphTile`](super::GraphTileView) text list,
+/// Text is stored in the graph tile text list,
 /// and the offset is stored within the sign.
 /// The directed edge index within the tile is also stored
 /// so that signs can be found via either the directed edge or node index.
@@ -70,7 +70,7 @@ struct SignBitField {
 #[repr(C)]
 pub struct Sign {
     bitfield: SignBitField,
-    /// The offset into the [`GraphTile`](super::GraphTileView) text list
+    /// The offset into the graph tile text list
     /// which contains the text for this sign.
     pub text_offset: U32<LE>,
 }
