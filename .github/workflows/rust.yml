@@ -20,12 +20,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install cargo-nextest
-      uses: baptiste0928/cargo-install@v3
-      with:
-        crate: cargo-nextest
-        locked: true
+    - uses: taiki-e/install-action@nextest
 
     - name: Build workspace
       run: cargo build --verbose
