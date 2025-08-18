@@ -28,11 +28,22 @@ jobs:
     - name: Run tests
       run: cargo nextest run --no-fail-fast
 
+    - name: Run tests (big-endian s390x)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo nextest run --no-fail-fast --target s390x-unknown-linux-gnu
+
     - name: Install Miri
       run: rustup +nightly component add miri
 
     - name: Run tests in Miri
       run: cargo +nightly miri nextest run --no-fail-fast
+      env:
+        RUST_BACKTRACE: 1
+        MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-env-forward=RUST_BACKTRACE
+
+    - name: Run tests in Miri (big-endian s390x)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo +nightly miri nextest run --no-fail-fast --target s390x-unknown-linux-gnu
       env:
         RUST_BACKTRACE: 1
         MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-env-forward=RUST_BACKTRACE
