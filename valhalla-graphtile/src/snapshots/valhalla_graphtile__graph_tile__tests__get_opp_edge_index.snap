@@ -1,5 +1,5 @@
 ---
-source: valhalla-graphtile/src/graph_tile/mod.rs
+source: valhalla-graphtile/src/graph_tile.rs
 expression: edges
 ---
 [
