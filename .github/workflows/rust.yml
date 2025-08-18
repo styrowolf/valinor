@@ -32,6 +32,10 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: rustup target add s390x-unknown-linux-gnu
 
+    - name: Install s390x cross toolchain and QEMU (Ubuntu only)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y gcc-s390x-linux-gnu g++-s390x-linux-gnu libc6-dev-s390x-cross qemu-user-static
+
     - name: Run tests (big-endian s390x)
       if: matrix.os == 'ubuntu-latest'
       run: cargo nextest run --no-fail-fast --target s390x-unknown-linux-gnu
