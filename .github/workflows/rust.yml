@@ -17,11 +17,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install cargo-nextest
+      uses: baptiste0928/cargo-install@v3
+      with:
+        crate: cargo-nextest
+        locked: true
+
     - name: Build workspace
       run: cargo build --verbose
 
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo nextest run --no-fail-fast
+
+    - name: Run tests in Miri
+      run: cargo +nightly miri nextest run -p valhalla-graphtile --no-fail-fast
+      env:
+        RUST_BACKTRACE: 1
+        MIRI_FLAGS: "-Zmiri-disable-isolation -Zmiri-env-forward=RUST_BACKTRACE"
 
     - name: Build valhalla-graphtile in isolation (default feature flags)
       run: cargo build -p valhalla-graphtile
