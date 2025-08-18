@@ -58,22 +58,146 @@ pub enum LookupError {
     InvalidIndex,
 }
 
+pub trait GraphTile {
+    /// Gets the Graph ID of the tile.
+    fn graph_id(&self) -> GraphId;
+
+    /// Does the supplied graph ID belong in this tile?
+    ///
+    /// A true result does not necessarily guarantee that an object with this ID exists,
+    /// but in that case, either you've cooked up an invalid ID for fun,
+    /// or the graph is invalid.
+    fn may_contain_id(&self, id: GraphId) -> bool;
+
+    /// Gets a reference to the [``GraphTileHeader``](GraphTileHeader).
+    fn header(&self) -> &GraphTileHeader;
+
+    /// Gets a reference to a node in this tile with the given graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    fn get_node(&self, id: GraphId) -> Result<&NodeInfo, LookupError>;
+
+    /// Gets a reference to the directed edge in this tile by graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError>;
+
+    /// Gets the index for the opposing index of a directed edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [``LookupError``](LookupError) if the graph ID is not present in the tile.
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError>;
+
+    /// Gets a reference to an extended directed edge in this tile by graph ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the graph ID cannot be contained in this tile
+    /// or the index is invalid.
+    fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError>;
+
+    /// Gets access restriction for a directed edge
+    /// which apply to *any* of the supplied access modes (ex: auto, bicycle, etc.).
+    fn get_access_restrictions(
+        &self,
+        directed_edge_index: u32,
+        access_modes: EnumSet<Access>,
+    ) -> Vec<&AccessRestriction>;
+
+    /// Gets edge info for a directed edge.
+    ///
+    /// # Errors
+    ///
+    /// Since this accepts a directed edge reference,
+    /// any errors that arise are due to invalid/corrupt graph tiles.
+    fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo<'_>, GraphTileError>;
+
+    // Lower level "raw" accessors
+
+    /// A raw slice of the tile's directed edges (i.e. for iteration).
+    fn directed_edges(&self) -> &[DirectedEdge];
+
+    /// Administrative regions covered in this tile.
+    fn admins(&self) -> &[Admin];
+}
+
 self_cell! {
     /// An owned graph tile.
     ///
     /// An owned graph tile can be constructed from an owned byte array, `Vec<u8>`.
-    /// You can access the underlying data structure with [``.as_tile()``][OwnedGraphTile::as_tile].
     pub struct OwnedGraphTile {
         owner: Vec<u8>,
         #[covariant]
-        dependent: GraphTile,
+        dependent: GraphTileView,
     }
 }
 
-impl OwnedGraphTile {
+impl GraphTile for OwnedGraphTile {
     #[inline]
-    pub fn as_tile(&self) -> &GraphTile<'_> {
+    fn graph_id(&self) -> GraphId {
+        self.borrow_dependent().graph_id()
+    }
+
+    #[inline]
+    fn may_contain_id(&self, id: GraphId) -> bool {
+        self.borrow_dependent().may_contain_id(id)
+    }
+
+    #[inline]
+    fn header(&self) -> &GraphTileHeader {
+        self.borrow_dependent().header()
+    }
+
+    #[inline]
+    fn get_node(&self, id: GraphId) -> Result<&NodeInfo, LookupError> {
+        self.borrow_dependent().get_node(id)
+    }
+
+    #[inline]
+    fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
+        self.borrow_dependent().get_directed_edge(id)
+    }
+
+    #[inline]
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError> {
+        self.borrow_dependent().get_opp_edge_index(graph_id)
+    }
+
+    #[inline]
+    fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError> {
+        self.borrow_dependent().get_ext_directed_edge(id)
+    }
+
+    #[inline]
+    fn get_access_restrictions(
+        &self,
+        directed_edge_index: u32,
+        access_modes: EnumSet<Access>,
+    ) -> Vec<&AccessRestriction> {
         self.borrow_dependent()
+            .get_access_restrictions(directed_edge_index, access_modes)
+    }
+
+    #[inline]
+    fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo<'_>, GraphTileError> {
+        self.borrow_dependent().get_edge_info(directed_edge)
+    }
+
+    #[inline]
+    fn directed_edges(&self) -> &[DirectedEdge] {
+        self.borrow_dependent().directed_edges()
+    }
+
+    #[inline]
+    fn admins(&self) -> &[Admin] {
+        self.borrow_dependent().admins()
     }
 }
 
@@ -81,15 +205,17 @@ impl TryFrom<Vec<u8>> for OwnedGraphTile {
     type Error = GraphTileError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        OwnedGraphTile::try_new(value, |data| GraphTile::try_from(data.as_ref()))
+        OwnedGraphTile::try_new(value, |data| GraphTileView::try_from(data.as_ref()))
     }
 }
 
-/// A tile within the Valhalla hierarchical tile graph.
-pub struct GraphTile<'a> {
+/// An internal view over a single tile in the Valhalla hierarchical tile graph.
+///
+/// Access should normally go through the [``GraphTile``](GraphTile) trait.
+struct GraphTileView<'a> {
     memory: &'a [u8],
     /// Header with various metadata about the tile and internal sizes.
-    pub header: GraphTileHeader,
+    header: GraphTileHeader,
     /// The list of nodes in the graph tile.
     nodes: &'a [NodeInfo],
     /// The list of transitions between nodes on different levels.
@@ -116,29 +242,24 @@ pub struct GraphTile<'a> {
     // TODO: Operator one stops(?)
 }
 
-impl GraphTile<'_> {
-    /// Gets the Graph ID of the tile.
+impl GraphTile for GraphTileView<'_> {
     #[inline]
-    pub fn graph_id(&self) -> GraphId {
+    fn graph_id(&self) -> GraphId {
         self.header.graph_id()
     }
 
-    /// Does the supplied graph ID belong in this tile?
-    ///
-    /// A true result does not necessarily guarantee that an object with this ID exists,
-    /// but in that case, either you've cooked up an invalid ID for fun,
-    /// or the graph is invalid.
-    pub fn may_contain_id(&self, id: &GraphId) -> bool {
+    #[inline]
+    fn may_contain_id(&self, id: GraphId) -> bool {
         id.tile_base_id() == self.graph_id().tile_base_id()
     }
 
-    /// Gets a reference to a node in this tile with the given graph ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the graph ID cannot be contained in this tile
-    /// or the index is invalid.
-    pub fn get_node(&self, id: &GraphId) -> Result<&NodeInfo, LookupError> {
+    #[inline]
+    fn header(&self) -> &GraphTileHeader {
+        &self.header
+    }
+
+    #[inline]
+    fn get_node(&self, id: GraphId) -> Result<&NodeInfo, LookupError> {
         if self.may_contain_id(id) {
             self.nodes
                 .get(id.index() as usize)
@@ -154,7 +275,7 @@ impl GraphTile<'_> {
     ///
     /// Returns an error if the graph ID cannot be contained in this tile
     /// or the index is invalid.
-    pub fn get_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdge, LookupError> {
+    fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
         if self.may_contain_id(id) {
             self.directed_edges
                 .get(id.index() as usize)
@@ -164,8 +285,7 @@ impl GraphTile<'_> {
         }
     }
 
-    /// Gets the opposing edge index, if and only if it exists in this tile.
-    pub fn get_opp_edge_index(&self, graph_id: &GraphId) -> Result<u32, LookupError> {
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError> {
         let edge = self.get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
@@ -173,18 +293,12 @@ impl GraphTile<'_> {
         let opp_edge_index = edge.opposing_edge_index();
 
         // TODO: Probably a cleaner pattern here?
-        let node_edge_index = self.get_node(&end_node_id).map(NodeInfo::edge_index)?;
+        let node_edge_index = self.get_node(end_node_id).map(NodeInfo::edge_index)?;
 
         Ok(node_edge_index + opp_edge_index)
     }
 
-    /// Gets a reference to an extended directed edge in this tile by graph ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the graph ID cannot be contained in this tile
-    /// or the index is invalid.
-    pub fn get_ext_directed_edge(&self, id: &GraphId) -> Result<&DirectedEdgeExt, LookupError> {
+    fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError> {
         if self.may_contain_id(id) {
             self.ext_directed_edges
                 .get(id.index() as usize)
@@ -194,9 +308,7 @@ impl GraphTile<'_> {
         }
     }
 
-    /// Gets access restriction for a directed edge
-    /// which apply to *any* of the supplied access modes (ex: auto, bicycle, etc.).
-    pub fn get_access_restrictions(
+    fn get_access_restrictions(
         &self,
         directed_edge_index: u32,
         access_modes: EnumSet<Access>,
@@ -216,11 +328,7 @@ impl GraphTile<'_> {
             .collect()
     }
 
-    /// Gets edge info for a directed edge.
-    pub fn get_edge_info(
-        &self,
-        directed_edge: &DirectedEdge,
-    ) -> Result<EdgeInfo<'_>, GraphTileError> {
+    fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo<'_>, GraphTileError> {
         let edge_info_start = self.header.edge_info_offset.get() as usize;
         let edge_info_offset = directed_edge.edge_info_offset() as usize;
 
@@ -233,10 +341,20 @@ impl GraphTile<'_> {
             &self.memory[text_start..text_start + text_size],
         ))
     }
+
+    #[inline]
+    fn directed_edges(&self) -> &[DirectedEdge] {
+        self.directed_edges
+    }
+
+    #[inline]
+    fn admins(&self) -> &[Admin] {
+        self.admins
+    }
 }
 
 // TODO: Feels like this could be a macro
-impl<'a> TryFrom<&'a [u8]> for GraphTile<'a> {
+impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
     type Error = GraphTileError;
 
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
@@ -369,21 +487,20 @@ static TEST_GRAPH_TILE: LazyLock<OwnedGraphTile> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use crate::Access;
-    use crate::graph_tile::{TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
     use enumset::{EnumSet, enum_set};
 
     #[test]
     fn test_get_opp_edge_index() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
-        let edges: Vec<_> = (0..u64::from(tile.header.directed_edge_count()))
+        let edges: Vec<_> = (0..u64::from(tile.header().directed_edge_count()))
             .map(|index| {
                 let edge_id = TEST_GRAPH_TILE_ID
                     .with_index(index)
                     .expect("Invalid graph ID.");
                 let opp_edge_index = tile
-                    .get_opp_edge_index(&edge_id)
+                    .get_opp_edge_index(edge_id)
                     .expect("Unable to get opp edge index.");
                 opp_edge_index
             })
@@ -397,12 +514,11 @@ mod tests {
 
     #[test]
     fn test_get_access_restrictions() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         let mut found_restriction_count = 0;
         let mut found_partial_subset_count = 0;
-        for edge_index in 0..tile.header.directed_edge_count() {
+        for edge_index in 0..tile.header().directed_edge_count() {
             // Sanity check edge index with no access mode filter
             let all_edge_restrictions = tile.get_access_restrictions(edge_index, EnumSet::all());
             for restriction in &all_edge_restrictions {
@@ -440,21 +556,20 @@ mod tests {
     #[test]
     fn test_edge_bins() {
         // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
-        assert_eq!(tile.edge_bins.level(), 0);
-        assert_eq!(tile.edge_bins.tile_id(), 0);
-        assert_eq!(tile.edge_bins.index(), 32000);
+        assert_eq!(tile_view.edge_bins.level(), 0);
+        assert_eq!(tile_view.edge_bins.tile_id(), 0);
+        assert_eq!(tile_view.edge_bins.index(), 32000);
     }
 
     #[test]
     fn test_edge_info() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         let first_edge_info = tile
-            .get_edge_info(&tile.directed_edges[0])
+            .get_edge_info(&tile.directed_edges().first().unwrap())
             .expect("Unable to get edge info.");
 
         // insta internally does a fork operation, which is not supported under Miri
@@ -467,7 +582,7 @@ mod tests {
         assert_eq!(first_edge_info.way_id(), 0);
 
         let last_edge_info = tile
-            .get_edge_info(&tile.directed_edges.last().unwrap())
+            .get_edge_info(tile.directed_edges().last().unwrap())
             .expect("Unable to get edge info.");
 
         // insta internally does a fork operation, which is not supported under Miri
@@ -479,7 +594,7 @@ mod tests {
 
         // Edge chosen somewhat randomly; it happens to have multiple names.
         let other_edge_info = tile
-            .get_edge_info(&tile.directed_edges[2000])
+            .get_edge_info(&tile.directed_edges()[2000])
             .expect("Unable to get edge info.");
 
         // insta internally does a fork operation, which is not supported under Miri

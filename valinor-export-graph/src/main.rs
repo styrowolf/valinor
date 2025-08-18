@@ -10,9 +10,8 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
-use valhalla_graphtile::graph_tile::{DirectedEdge, LookupError};
+use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
@@ -118,10 +117,9 @@ fn main() -> anyhow::Result<()> {
             progress_bar.as_ref().inspect(|bar| bar.inc(1));
             // Get the index pointer for each tile in the level
             let graph_id = GraphId::try_from_components(level.level, u64::from(tile_id), 0)?;
-            match reader.get_tile_containing(&graph_id) {
-                Ok(owned_tile) => {
-                    let tile_edge_count =
-                        owned_tile.as_tile().header.directed_edge_count() as usize;
+            match reader.get_tile_containing(graph_id) {
+                Ok(tile) => {
+                    let tile_edge_count = tile.header().directed_edge_count() as usize;
                     tile_set.insert(graph_id, edge_count);
                     edge_count += tile_edge_count;
                 }
@@ -169,8 +167,7 @@ fn main() -> anyhow::Result<()> {
             let reader =
                 DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-            let owned_tile = reader.get_tile_containing(&tile_id)?;
-            let tile = owned_tile.as_tile();
+            let tile = reader.get_tile_containing(*tile_id)?;
 
             let writer = BufWriter::new(if use_stdout {
                 Box::new(io::stdout()) as Box<dyn Write>
@@ -184,7 +181,7 @@ fn main() -> anyhow::Result<()> {
 
             let mut writer = Encoder::new(writer, 0)?.auto_finish();
 
-            for index in 0..tile.header.directed_edge_count() as usize {
+            for index in 0..tile.header().directed_edge_count() as usize {
                 let mut pe = processed_edges.lock().unwrap();
                 if pe.contains(edge_index_offset + index) {
                     // Skip edges we've already processed
@@ -196,7 +193,7 @@ fn main() -> anyhow::Result<()> {
                 // Get the edge
                 // TODO: Helper for rewriting the index of a graph ID?
                 let edge_id = tile_id.with_index(index as u64)?;
-                let edge = tile.get_directed_edge(&edge_id)?;
+                let edge = tile.get_directed_edge(edge_id)?;
 
                 // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
                 pe.insert(edge_index_offset + index);
@@ -212,19 +209,19 @@ fn main() -> anyhow::Result<()> {
 
                 // Get the opposing edge
 
-                let opposing_edge = match tile.get_opp_edge_index(&edge_id) {
+                let opposing_edge = match tile.get_opp_edge_index(edge_id) {
                     Ok(opp_edge_id) => {
                         let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
                         EdgePointer {
                             graph_id: opp_graph_id,
-                            tile: owned_tile.clone(),
+                            tile: tile.clone(),
                         }
                     }
                     Err(LookupError::InvalidIndex) => {
                         return Err(LookupError::InvalidIndex)?;
                     }
                     Err(LookupError::MismatchedBase) => {
-                        let (opp_graph_id, tile) = reader.get_opposing_edge(&edge_id)?;
+                        let (opp_graph_id, tile) = reader.get_opposing_edge(edge_id)?;
                         EdgePointer {
                             graph_id: opp_graph_id,
                             tile,

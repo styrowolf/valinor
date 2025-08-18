@@ -4,7 +4,7 @@ use zerocopy_derive::{FromBytes, Immutable, TryFromBytes, Unaligned};
 
 /// Holds a generic sign with type and text.
 ///
-/// Text is stored in the [`GraphTile`](super::GraphTile) text list,
+/// Text is stored in the [`GraphTile`](super::GraphTileView) text list,
 /// and the offset is stored within the sign.
 /// The directed edge index within the tile is also stored
 /// so that signs can be found via either the directed edge or node index.
@@ -70,7 +70,7 @@ struct SignBitField {
 #[repr(C)]
 pub struct Sign {
     bitfield: SignBitField,
-    /// The offset into the [`GraphTile`](super::GraphTile) text list
+    /// The offset into the [`GraphTile`](super::GraphTileView) text list
     /// which contains the text for this sign.
     pub text_offset: U32<LE>,
 }
@@ -111,10 +111,13 @@ mod tests {
 
     #[test]
     fn test_parse_sign_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
-        assert_eq!(tile.signs.len(), tile.header.sign_count() as usize);
+        assert_eq!(
+            tile_view.signs.len(),
+            tile_view.header.sign_count() as usize
+        );
     }
 
     // TODO: There aren't any signs in the test tile

@@ -6,9 +6,9 @@ use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 #[derive(FromBytes, Immutable, Unaligned, Debug)]
 #[repr(C)]
 pub struct Admin {
-    /// The offset into the [`GraphTile`](super::GraphTile) text list for the country name.
+    /// The offset into the [`GraphTile`](super::GraphTileView) text list for the country name.
     pub country_name_offset: U32<LE>,
-    /// The offset into the [`GraphTile`](super::GraphTile) text list for the principal subdivision name.
+    /// The offset into the [`GraphTile`](super::GraphTileView) text list for the principal subdivision name.
     pub principal_subdivision_offset: U32<LE>,
     country_iso: [u8; 2],
     principal_subdivision_iso: [u8; 3],
@@ -30,35 +30,33 @@ impl Admin {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_admin_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
-        assert_eq!(tile.admins.len(), tile.header.admin_count() as usize);
+        assert_eq!(tile.admins().len(), tile.header().admin_count() as usize);
     }
 
     #[test]
     fn test_parse_admins() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         let country_isos = tile
-            .admins
+            .admins()
             .iter()
             .map(|admin| admin.country_iso())
             .collect::<Vec<_>>();
         let principal_subdivision_isos = tile
-            .admins
+            .admins()
             .iter()
             .map(|admin| admin.principal_subdivision_iso())
             .collect::<Vec<_>>();
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!("raw_admin_snapshot", tile.admins);
+            insta::assert_debug_snapshot!("raw_admin_snapshot", tile.admins());
             insta::assert_debug_snapshot!("country_iso", country_isos);
             insta::assert_debug_snapshot!("principal_subdivision_iso", principal_subdivision_isos);
         }

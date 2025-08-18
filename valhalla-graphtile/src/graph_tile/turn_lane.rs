@@ -19,14 +19,14 @@ struct EdgeIndex {
 #[repr(C)]
 pub struct TurnLane {
     edge_index: EdgeIndex,
-    /// The offset into the [`GraphTile`](super::GraphTile) text list
+    /// The offset into the [`GraphTile`](super::GraphTileView) text list
     /// which contains the text for this turn lane.
     pub text_offset: U32<LE>,
 }
 
 /// Holds turn lane information at the end of a directed edge.
 ///
-/// Turn lane text is stored in the [`GraphTile`](super::GraphTile) text list
+/// Turn lane text is stored in the [`GraphTile`](super::GraphTileView) text list
 /// and the offset is stored within the [`TurnLane`] structure.
 impl TurnLane {
     /// Gets the index (within the same tile) of the directed edge that this sign applies to.
@@ -38,27 +38,27 @@ impl TurnLane {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_turn_lane_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         assert_eq!(
-            tile.turn_lanes.len(),
-            tile.header.turn_lane_count() as usize
+            tile_view.turn_lanes.len(),
+            tile.header().turn_lane_count() as usize
         );
     }
 
     #[test]
     fn test_parse_turn_lanes() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!(tile.turn_lanes);
+            insta::assert_debug_snapshot!(tile_view.turn_lanes);
         }
     }
 }

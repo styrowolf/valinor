@@ -529,30 +529,28 @@ pub struct DirectedEdgeExt(U64<LE>);
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_directed_edges_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         assert_eq!(
-            tile.directed_edges.len(),
-            tile.header.directed_edge_count() as usize
+            tile.directed_edges().len(),
+            tile.header().directed_edge_count() as usize
         );
     }
 
     #[test]
     fn test_parse_nodes() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!("first_directed_edge", tile.directed_edges[0]);
+            insta::assert_debug_snapshot!("first_directed_edge", tile.directed_edges()[0]);
             insta::assert_debug_snapshot!(
                 "last_directed_edge",
-                tile.directed_edges.last().unwrap()
+                tile.directed_edges().last().unwrap()
             );
         }
 

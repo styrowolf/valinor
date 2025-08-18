@@ -96,43 +96,46 @@ impl AccessRestriction {
 #[cfg(test)]
 mod tests {
     use super::{Access, AccessRestrictionType};
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
     use enumset::EnumSet;
 
     #[test]
     fn test_parse_access_restrictions_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         assert_eq!(
-            tile.access_restrictions.len(),
-            tile.header.access_restriction_count() as usize
+            tile_view.access_restrictions.len(),
+            tile.header().access_restriction_count() as usize
         );
     }
 
     #[test]
     fn test_parse_access_restrictions() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!("first_access_restriction", tile.access_restrictions[0]);
+            insta::assert_debug_snapshot!(
+                "first_access_restriction",
+                tile_view.access_restrictions[0]
+            );
         }
 
         assert_eq!(
-            tile.access_restrictions[0].restriction_type(),
+            tile_view.access_restrictions[0].restriction_type(),
             AccessRestrictionType::MaxWeight
         );
         assert_eq!(
-            tile.access_restrictions[0].affected_access_modes(),
+            tile_view.access_restrictions[0].affected_access_modes(),
             EnumSet::from(Access::Truck)
         );
 
         if !cfg!(miri) {
             insta::assert_debug_snapshot!(
                 "last_access_restriction",
-                tile.access_restrictions.last().unwrap()
+                tile_view.access_restrictions.last().unwrap()
             );
         }
 

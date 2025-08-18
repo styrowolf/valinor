@@ -251,7 +251,7 @@ impl NodeInfo {
 
     /// The index of the first transition from this node.
     /// This index is into the `transitions` vector on
-    /// [`GraphTile`](super::GraphTile).
+    /// [`GraphTile`](super::GraphTileView).
     #[inline]
     pub const fn transition_index(&self) -> u32 {
         self.third_bit_field.transition_index().get()
@@ -340,59 +340,59 @@ impl NodeInfo {
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
     use enumset::EnumSet;
 
     #[test]
     fn test_parse_nodes_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
-        assert_eq!(tile.nodes.len(), tile.header.node_count() as usize);
+        assert_eq!(tile_view.nodes.len(), tile.header().node_count() as usize);
     }
 
     #[test]
     fn test_parse_nodes() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!("first_node", tile.nodes[0]);
-            insta::assert_debug_snapshot!("last_node", tile.nodes.last().unwrap());
+            insta::assert_debug_snapshot!("first_node", tile_view.nodes[0]);
+            insta::assert_debug_snapshot!("last_node", tile_view.nodes.last().unwrap());
         }
 
         // Sanity check our coordinate parsing
-        let coord = tile.nodes[0].coordinate(tile.header.sw_corner());
+        let coord = tile_view.nodes[0].coordinate(tile.header().sw_corner());
         assert!(coord.x - 1.5008542999999999 < f32::EPSILON);
         assert!(coord.y - 42.493887200000003 < f32::EPSILON);
 
         // TODO: Find some examples of restricted access
-        assert_eq!(tile.nodes[0].access(), EnumSet::all());
+        assert_eq!(tile_view.nodes[0].access(), EnumSet::all());
 
         // TODO: Test the headings
     }
 
     #[test]
     fn test_parse_transitions_count() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         assert_eq!(
-            tile.transitions.len(),
-            tile.header.transition_count() as usize
+            tile_view.transitions.len(),
+            tile.header().transition_count() as usize
         );
     }
 
     #[test]
     fn test_parse_transitions() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!("first_transition", tile.transitions[0]);
-            insta::assert_debug_snapshot!("last_transition", tile.transitions.last().unwrap());
+            insta::assert_debug_snapshot!("first_transition", tile_view.transitions[0]);
+            insta::assert_debug_snapshot!("last_transition", tile_view.transitions.last().unwrap());
         }
     }
 }

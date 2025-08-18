@@ -320,16 +320,15 @@ impl GraphTileHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::graph_tile::TEST_GRAPH_TILE;
+    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE};
 
     #[test]
     fn test_parse_header() {
-        let owned_tile = &*TEST_GRAPH_TILE;
-        let tile = owned_tile.as_tile();
+        let tile = &*TEST_GRAPH_TILE;
 
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
-            insta::assert_debug_snapshot!(tile.header);
+            insta::assert_debug_snapshot!(tile.header());
         }
     }
 }
