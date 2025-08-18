@@ -20,6 +20,12 @@ Something like this will generate a directory tree of zstd-compressed GeoJSON in
 cargo run --profile release -- /path/to/valhalla/tiles /path/to/valhalla/tiles-json
 ```
 
+If you want to skip compression (and write plain newline-delimited GeoJSON with .geojson extension), pass `--no-compress`:
+
+```shell
+cargo run --profile release -- --no-compress /path/to/valhalla/tiles /path/to/valhalla/tiles-json
+```
+
 Some numbers for context using the UK in February 2025 run on an M1 Max:
 
 * Original OSM PBF size - 1.87GB
@@ -29,8 +35,16 @@ Some numbers for context using the UK in February 2025 run on an M1 Max:
 
 ### Dense tiles
 
+If compressing the output (recommended for most filesystms unless you have infinite space):
+
 ```shell
-rm -f valhalla.pmtiles && time find tiles-json/ -type f -name '*.zst' -print0 | xargs -0 zstd -dc | tippecanoe --no-tile-size-limit --no-feature-limit -Z4 -z12 --simplification=10 --simplify-only-low-zooms --coalesce --reorder --drop-lines -o valhalla.pmtiles
+rm -f valhalla.pmtiles && time find tiles-json/ -type f -name '*.zst' -print0 | xargs -0 zstd -dc | tippecanoe --no-tile-size-limit --no-feature-limit -Z4 -z13 --simplify-only-low-zooms --coalesce --reorder --drop-lines -o valhalla.pmtiles
+```
+
+If not compressing the output (ZFS or other filesystems with sane compression):
+
+```shell
+rm -f valhalla.pmtiles && time find tiles-json/ -type f -name '*.geojson' -exec cat -- {} + | tippecanoe --no-tile-size-limit --no-feature-limit -Z4 -z13 --simplify-only-low-zooms --coalesce --reorder --hilbert --drop-lines -o valhalla.pmtiles
 ```
 
 And some more numbers for context (also UK):

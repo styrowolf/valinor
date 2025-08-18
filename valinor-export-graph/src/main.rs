@@ -10,8 +10,9 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
-use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError};
+use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError, OwnedGraphTile};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
     DirectoryTileProvider, GraphTileProvider, GraphTileProviderError,
@@ -61,10 +62,14 @@ struct Cli {
     /// Skips roads with no name.
     #[arg(env, long)]
     skip_unnamed: bool,
+
+    /// Disable zstd compression of output. The file extension will be .geojson  instead of .geojson.zst.
+    #[arg(env, long, default_value_t = false)]
+    no_compression: bool,
 }
 
 impl Cli {
-    fn use_stdout(&self) -> bool {
+    fn write_to_stdout(&self) -> bool {
         self.output_dir == PathBuf::from("-")
     }
 }
@@ -74,7 +79,7 @@ fn main() -> anyhow::Result<()> {
     let tile_path = cli.tile_path.clone();
     let reader = DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-    let use_stdout = cli.use_stdout();
+    let write_to_stdout = cli.write_to_stdout();
 
     let should_skip_edge = |edge: &DirectedEdge, names: &Vec<Cow<str>>| {
         // TODO: Actually, visualizing the shortcuts as a separate layer COULD be quite interesting!
@@ -152,7 +157,7 @@ fn main() -> anyhow::Result<()> {
         bar
     });
 
-    if !use_stdout {
+    if !write_to_stdout {
         // Create directories as needed
         std::fs::create_dir_all(cli.output_dir.clone())?;
     }
@@ -169,108 +174,146 @@ fn main() -> anyhow::Result<()> {
 
             let tile = reader.get_tile_containing(*tile_id)?;
 
-            let writer = BufWriter::new(if use_stdout {
-                Box::new(io::stdout()) as Box<dyn Write>
+            // Create a base writer to either stdout or a file with appropriate extension
+            let base: Box<dyn Write> = if write_to_stdout {
+                Box::new(io::stdout())
             } else {
-                let path = out_dir.join(tile.graph_id().file_path("geojson.zst")?);
+                let ext = if cli.no_compression { "geojson" } else { "geojson.zst" };
+                let path = out_dir.join(tile.graph_id().file_path(ext)?);
                 let parent = path.parent().expect("Unexpected path structure");
                 // Create the output directory
                 std::fs::create_dir_all(parent)?;
                 Box::new(File::create(path)?)
-            });
+            };
 
-            let mut writer = Encoder::new(writer, 0)?.auto_finish();
-
-            for index in 0..tile.header().directed_edge_count() as usize {
-                let mut pe = processed_edges.lock().unwrap();
-                if pe.contains(edge_index_offset + index) {
-                    // Skip edges we've already processed
-                    continue;
-                }
-
-                // TODO: Some TODO about transition edges in the original source
-
-                // Get the edge
-                // TODO: Helper for rewriting the index of a graph ID?
-                let edge_id = tile_id.with_index(index as u64)?;
-                let edge = tile.get_directed_edge(edge_id)?;
-
-                // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
-                pe.insert(edge_index_offset + index);
-
-                progress_bar.as_ref().inspect(|bar| bar.inc(1));
-
-                // Skip certain edge types based on the config
-                let edge_info = tile.get_edge_info(edge)?;
-                let names = edge_info.get_names();
-                if should_skip_edge(edge, &names) {
-                    continue;
-                }
-
-                // Get the opposing edge
-
-                let opposing_edge = match tile.get_opp_edge_index(edge_id) {
-                    Ok(opp_edge_id) => {
-                        let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
-                        EdgePointer {
-                            graph_id: opp_graph_id,
-                            tile: tile.clone(),
-                        }
-                    }
-                    Err(LookupError::InvalidIndex) => {
-                        return Err(LookupError::InvalidIndex)?;
-                    }
-                    Err(LookupError::MismatchedBase) => {
-                        let (opp_graph_id, tile) = reader.get_opposing_edge(edge_id)?;
-                        EdgePointer {
-                            graph_id: opp_graph_id,
-                            tile,
-                        }
-                    }
-                };
-                progress_bar.as_ref().inspect(|bar| bar.inc(1));
-                if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
-                    pe.insert(offset + opposing_edge.graph_id.index() as usize);
-                } else {
-                    // This happens in extracts, but shouldn't for the planet...
-                    eprintln!(
-                        "Missing opposite edge {} in tile set",
-                        opposing_edge.graph_id
-                    );
-                }
-
-                drop(pe); // Release the lock
-
-                // Keep some state about this section of road?
-                // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
-                //     graph_id: edge_id,
-                //     tile: tile.clone(),
-                // }];
-
-                // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
-                // This should be an opt-in behavior for visualization of similar roads,
-                // but note that it then no longer becomes 1:1
-                // Could also be useful for MLT representation?
-
-                // TODO: Visualize the dead ends? End node in another layer at the end of edges that don't connect?
-
-                // TODO: Coalesce with opposing edge.
-                // Seems like we may be able to do something like this:
-                //   - Find which edge is "forward"
-                //   - Omit forward field
-                //   - Check if any difference in edge + opp edge tagging; I'd expect reversed access; anything else? Can test this...
-                let record =
-                    EdgeRecord::new(&STANDARD_LEVELS[tile_id.level() as usize], edge, edge_info)?;
-                serde_json::to_writer(&mut writer, &record)?;
-                writer.write(&['\n' as u8])?;
+            // Wrap base in a buffered writer, then optionally zstd
+            if cli.no_compression {
+                let writer = BufWriter::new(base);
+                export_edges_for_tile(
+                    writer,
+                    tile,
+                    *tile_id,
+                    *edge_index_offset,
+                    &reader,
+                    &tile_set,
+                    &processed_edges,
+                    &progress_bar,
+                    &should_skip_edge,
+                )?
+            } else {
+                // NB: level=0 is the zstd default.
+                let writer = Encoder::new(BufWriter::new(base), 0)?.auto_finish();
+                export_edges_for_tile(
+                    writer,
+                    tile,
+                    *tile_id,
+                    *edge_index_offset,
+                    &reader,
+                    &tile_set,
+                    &processed_edges,
+                    &progress_bar,
+                    &should_skip_edge,
+                )?
             }
 
             Ok::<_, anyhow::Error>(())
         })?;
 
-    // TODO: Anything we need to do for nodes?
+    // TODO: Anything we need to do for nodes? Not for most, but maybe things like bollards??
 
     progress_bar.inspect(ProgressBar::finish);
+
+    Ok(())
+}
+
+fn export_edges_for_tile<W: Write>(
+    mut writer: W,
+    tile: Rc<OwnedGraphTile>,
+    tile_id: GraphId,
+    edge_index_offset: usize,
+    reader: &DirectoryTileProvider,
+    tile_set: &HashMap<GraphId, usize>,
+    processed_edges: &Mutex<BitSet>,
+    progress_bar: &Option<ProgressBar>,
+    should_skip_edge: &impl Fn(&DirectedEdge, &Vec<Cow<str>>) -> bool,
+) -> anyhow::Result<()> {
+    for index in 0..tile.header().directed_edge_count() as usize {
+        let mut pe = processed_edges.lock().unwrap();
+        if pe.contains(edge_index_offset + index) {
+            // Skip edges we've already processed
+            continue;
+        }
+
+        // TODO: Some TODO about transition edges in the original source
+
+        // Get the edge
+        let edge_id = tile_id.with_index(index as u64)?;
+        let edge = tile.get_directed_edge(edge_id)?;
+
+        // TODO: Mark the edge as seen (maybe? Weird TODO in the Valhalla source)
+        pe.insert(edge_index_offset + index);
+
+        progress_bar.as_ref().inspect(|bar| bar.inc(1));
+
+        // Skip certain edge types based on the config
+        let edge_info = tile.get_edge_info(edge)?;
+        let names = edge_info.get_names();
+        if should_skip_edge(edge, &names) {
+            continue;
+        }
+
+        // Get the opposing edge
+        let opposing_edge = match tile.get_opp_edge_index(edge_id) {
+            Ok(opp_edge_id) => {
+                let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
+                EdgePointer {
+                    graph_id: opp_graph_id,
+                    tile: tile.clone(),
+                }
+            }
+            Err(LookupError::InvalidIndex) => {
+                return Err(LookupError::InvalidIndex)?;
+            }
+            Err(LookupError::MismatchedBase) => {
+                let (opp_graph_id, tile) = reader.get_opposing_edge(edge_id)?;
+                EdgePointer { graph_id: opp_graph_id, tile }
+            }
+        };
+        progress_bar.as_ref().inspect(|bar| bar.inc(1));
+        if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
+            pe.insert(offset + opposing_edge.graph_id.index() as usize);
+        } else {
+            // This happens in extracts, but shouldn't for the planet...
+            eprintln!(
+                "Missing opposite edge {} in tile set",
+                opposing_edge.graph_id
+            );
+        }
+
+        drop(pe); // Release the lock
+
+        // Keep some state about this section of road?
+        // let mut edges: Vec<EdgePointer> = vec![EdgePointer {
+        //     graph_id: edge_id,
+        //     tile: tile.clone(),
+        // }];
+
+        // TODO: Traverse forward and backward from the edge as an optimization to coalesce segments with no change?
+        // This should be an opt-in behavior for visualization of similar roads,
+        // but note that it then no longer becomes 1:1
+        // Could also be useful for MLT representation?
+
+        // TODO: Visualize the dead ends? End node in another layer at the end of edges that don't connect?
+
+        // TODO: Coalesce with opposing edge.
+        // Seems like we may be able to do something like this:
+        //   - Find which edge is "forward"
+        //   - Omit forward field
+        //   - Check if any difference in edge + opp edge tagging; I'd expect reversed access; anything else? Can test this...
+        let record = EdgeRecord::new(&STANDARD_LEVELS[tile_id.level() as usize], edge, edge_info)?;
+        serde_json::to_writer(&mut writer, &record)?;
+        writer.write(&['\n' as u8])?;
+    }
 
     Ok(())
 }
