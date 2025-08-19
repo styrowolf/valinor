@@ -35,7 +35,7 @@ Some numbers for context using the UK in February 2025 run on an M1 Max:
 
 ### Dense tiles
 
-If compressing the output (recommended for most filesystms unless you have infinite space):
+If compressing the output (recommended for most filesystems unless you have infinite space):
 
 ```shell
 rm -f valhalla.pmtiles && time find tiles-json/ -type f -name '*.zst' -print0 | xargs -0 zstd -dc | tippecanoe --no-tile-size-limit --no-feature-limit -Z4 -z13 --simplify-only-low-zooms --coalesce --reorder --drop-lines -o valhalla.pmtiles
