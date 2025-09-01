@@ -4,12 +4,12 @@ use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct EdgeIndex {
-    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(22, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     edge_index: U32<LE>,
     #[bits(10)]
     _spare: U16<LE>,

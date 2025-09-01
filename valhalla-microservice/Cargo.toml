@@ -1,0 +1,24 @@
+[package]
+name = "valhalla-microservice"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitfield-struct = { workspace = true }
+bit-twiddling-helpers = { workspace = true }
+http = { workspace = true }
+itertools = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+valhalla-proto = { workspace = true }
+zerocopy = { workspace = true }
+zerocopy-derive = { workspace = true }
+zeromq = "0.5.0-pre"
+
+[dev-dependencies]
+insta = { workspace = true }
+
+[lints]
+workspace = true

@@ -22,5 +22,6 @@ Here are a few things that we think are worth exploring:
   which are unlikely to be merged into the upstream codebase anytime soon;
   as of this writing, C++ is not capable of serving as a WASM Component Host
 * Improving the quality and safety of Valhalla (reimplementations tend to identify bugs in the original)
+* Simplifying the process of building Valhalla microservices
 
 If you're interested to collaborate, please get in touch!

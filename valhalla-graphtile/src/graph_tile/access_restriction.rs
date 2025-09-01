@@ -48,16 +48,16 @@ impl AccessRestrictionType {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(PartialEq, Eq, FromBytes, Immutable, Unaligned)]
 struct AccessRestrictionBitField {
-    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(22, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     edge_index: U32<LE>,
     #[bits(6)]
     restriction_type: AccessRestrictionType,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     modes: U16<LE>,
     #[bits(24)]
     _spare: U32<LE>,

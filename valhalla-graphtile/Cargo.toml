@@ -13,7 +13,8 @@ serialize_predicted_speed = ["serde"]
 self_cell = "1.2.0"
 thiserror = { workspace = true }
 geo = { workspace = true }
-bitfield-struct = "0.11.0"
+bitfield-struct = { workspace = true }
+bit-twiddling-helpers = { workspace = true }
 enumset = "1.1.7"
 integer-encoding = "4.0.2"
 lru = { workspace = true }

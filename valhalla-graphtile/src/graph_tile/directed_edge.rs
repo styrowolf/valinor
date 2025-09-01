@@ -9,16 +9,16 @@ use zerocopy_derive::{FromBytes, Immutable, Unaligned};
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct FirstBitfield {
-    #[bits(46, from = crate::conv_u64le::from_inner, into = crate::conv_u64le::into_inner)]
+    #[bits(46, from = bit_twiddling_helpers::conv_u64le::from_inner, into = bit_twiddling_helpers::conv_u64le::into_inner)]
     end_node: U64<LE>,
     #[bits(8)]
     restrictions: u8,
-    #[bits(7, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(7, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     opposing_edge_index: U32<LE>,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
@@ -32,18 +32,18 @@ struct FirstBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct SecondBitfield {
-    #[bits(25, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(25, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     edge_info_offset: U32<LE>,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     access_restrictions: U16<LE>,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     start_restriction: U16<LE>,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     end_restriction: U16<LE>,
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
@@ -57,8 +57,8 @@ struct SecondBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct ThirdBitfield {
@@ -96,14 +96,14 @@ struct ThirdBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct FourthBitfield {
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     forward_access: U16<LE>,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     reverse_access: U16<LE>,
     #[bits(5)]
     max_up_slope: u8,
@@ -165,16 +165,16 @@ struct FourthBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct FifthBitfield {
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     turn_type: U32<LE>,
     #[bits(8)]
     edge_to_left: u8,
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     length: U32<LE>,
     #[bits(4)]
     weighted_grade: u8,
@@ -184,12 +184,12 @@ struct FifthBitfield {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct StopImpact {
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     impact_between_edges: U32<LE>,
     #[bits(8)]
     edge_to_right: u8,
@@ -207,8 +207,8 @@ union StopOrLine {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct SeventhBitField {

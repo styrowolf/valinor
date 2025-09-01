@@ -51,12 +51,12 @@ impl SignType {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct SignBitField {
-    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(22, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     edge_or_node_index: U32<LE>,
     #[bits(8)]
     sign_type: SignType,

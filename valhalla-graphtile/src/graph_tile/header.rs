@@ -11,12 +11,12 @@ const EMPTY_SLOTS: usize = 11;
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct FirstBitfield {
-    #[bits(46, from = crate::conv_u64le::from_inner, into = crate::conv_u64le::into_inner)]
+    #[bits(46, from = bit_twiddling_helpers::conv_u64le::from_inner, into = bit_twiddling_helpers::conv_u64le::into_inner)]
     graph_id: U64<LE>,
     #[bits(4)]
     density: u8,
@@ -38,16 +38,16 @@ struct FirstBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct SecondBitfield {
-    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(21, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     node_count: U32<LE>,
-    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(21, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     directed_edge_count: U32<LE>,
-    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(21, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     predicted_speeds_count: U32<LE>,
     #[bits(1)]
     _spare: u8,
@@ -59,12 +59,12 @@ struct SecondBitfield {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct TransitionCountBitfield {
-    #[bits(22, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(22, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     transition_count: U32<LE>,
     // Deprecated; scheduled for deletion in v4
     #[bits(10)]
@@ -73,12 +73,12 @@ struct TransitionCountBitfield {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct TurnLaneCountBitfield {
-    #[bits(21, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(21, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     turn_lane_count: U32<LE>,
     #[bits(11)]
     _spare: u16,
@@ -86,18 +86,18 @@ struct TurnLaneCountBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct TransitRecordBitfield {
-    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(16, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     transfer_count: U16<LE>,
     #[bits(7)]
     _spare: U8<LE>,
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     departure_count: U32<LE>,
-    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(16, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     stop_count: U16<LE>,
     #[bits(1)]
     _spare: u8,
@@ -105,16 +105,16 @@ struct TransitRecordBitfield {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct MiscCountsBitFieldOne {
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     route_count: U16<LE>,
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     schedule_count: U16<LE>,
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     sign_count: U32<LE>,
     #[bits(16)]
     _spare: Ui6<LE>,
@@ -122,14 +122,14 @@ struct MiscCountsBitFieldOne {
 
 #[bitfield(u64,
     repr = U64<LE>,
-    from = crate::conv_u64le::from_inner,
-    into = crate::conv_u64le::into_inner
+    from = bit_twiddling_helpers::conv_u64le::from_inner,
+    into = bit_twiddling_helpers::conv_u64le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct MiscCountsBitFieldTwo {
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     access_restriction_count: U32<LE>,
-    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(16, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     admin_count: U16<LE>,
     #[bits(24)]
     _spare: U32<LE>,

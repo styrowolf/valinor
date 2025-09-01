@@ -12,6 +12,10 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
+use tracing::warn;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError, OwnedGraphTile};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
@@ -26,7 +30,7 @@ static PROGRESS_STYLE: OnceLock<ProgressStyle> = OnceLock::new();
 mod models;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(version, about, long_about = None)]
 struct Cli {
     /// Path to the Valhalla graph tiles.
     ///
@@ -97,6 +101,11 @@ fn main() -> anyhow::Result<()> {
             .progress_chars("##-"),
         );
     }
+
+    tracing_subscriber::registry()
+        // Standard logger, configured via the RUST_LOG env variable
+        .with(tracing_subscriber::fmt::layer().with_filter(EnvFilter::from_default_env()))
+        .init();
 
     // TODO: Almost all code below feels like it can be abstracted into a graph traversal helper...
     // We could even make processing plugins with WASM LOL
@@ -178,7 +187,11 @@ fn main() -> anyhow::Result<()> {
             let base: Box<dyn Write> = if write_to_stdout {
                 Box::new(io::stdout())
             } else {
-                let ext = if cli.no_compression { "geojson" } else { "geojson.zst" };
+                let ext = if cli.no_compression {
+                    "geojson"
+                } else {
+                    "geojson.zst"
+                };
                 let path = out_dir.join(tile.graph_id().file_path(ext)?);
                 let parent = path.parent().expect("Unexpected path structure");
                 // Create the output directory
@@ -276,7 +289,10 @@ fn export_edges_for_tile<W: Write>(
             }
             Err(LookupError::MismatchedBase) => {
                 let (opp_graph_id, tile) = reader.get_opposing_edge(edge_id)?;
-                EdgePointer { graph_id: opp_graph_id, tile }
+                EdgePointer {
+                    graph_id: opp_graph_id,
+                    tile,
+                }
             }
         };
         progress_bar.as_ref().inspect(|bar| bar.inc(1));
@@ -284,7 +300,7 @@ fn export_edges_for_tile<W: Write>(
             pe.insert(offset + opposing_edge.graph_id.index() as usize);
         } else {
             // This happens in extracts, but shouldn't for the planet...
-            eprintln!(
+            warn!(
                 "Missing opposite edge {} in tile set",
                 opposing_edge.graph_id
             );

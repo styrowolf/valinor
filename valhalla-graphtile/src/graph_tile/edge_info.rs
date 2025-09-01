@@ -12,12 +12,12 @@ use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 pub struct NameInfo {
-    #[bits(24, from = crate::conv_u32le::from_inner, into = crate::conv_u32le::into_inner)]
+    #[bits(24, from = bit_twiddling_helpers::conv_u32le::from_inner, into = bit_twiddling_helpers::conv_u32le::into_inner)]
     name_offset: U32<LE>,
     /// Additional fields following the name.
     ///
@@ -37,12 +37,12 @@ pub struct NameInfo {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct FirstInnerBitfield {
-    #[bits(12, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     mean_elevation: U16<LE>,
     #[bits(4)]
     bike_network: u8,
@@ -54,14 +54,14 @@ struct FirstInnerBitfield {
 
 #[bitfield(u32,
     repr = U32<LE>,
-    from = crate::conv_u32le::from_inner,
-    into = crate::conv_u32le::into_inner
+    from = bit_twiddling_helpers::conv_u32le::from_inner,
+    into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
 #[derive(FromBytes, Immutable, Unaligned)]
 struct SecondInnerBitfield {
     #[bits(4)]
     name_count: u8,
-    #[bits(16, from = crate::conv_u16le::from_inner, into = crate::conv_u16le::into_inner)]
+    #[bits(16, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     encoded_shape_size: U16<LE>,
     #[bits(8)]
     extended_way_id: u8,

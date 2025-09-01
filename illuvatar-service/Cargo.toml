@@ -1,0 +1,23 @@
+[package]
+name = "illuvatar-service"
+description = "An alternate implementation of Odin, the part of Valhalla responsible for narrative and HTTP response generation."
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+http = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+valhalla-microservice = { workspace = true }
+valhalla-proto = { workspace = true }
+valhalla-response = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+
+[lints]
+workspace = true

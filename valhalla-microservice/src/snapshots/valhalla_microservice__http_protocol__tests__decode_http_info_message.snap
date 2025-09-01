@@ -1,0 +1,23 @@
+---
+source: valhalla-microservice/src/http_protocol.rs
+expression: parsed
+---
+HttpRequestInfo {
+    id: U32(
+        0,
+    ),
+    timestamp: U32(
+        1756460789,
+    ),
+    inner_bitfield: HttpRequestInfoInnerBitfield {
+        version: 1,
+        connection_keep_alive: false,
+        connection_close: false,
+        response_code: U16(
+            0,
+        ),
+    },
+    _spare: U16(
+        0,
+    ),
+}

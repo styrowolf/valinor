@@ -1,0 +1,19 @@
+---
+source: illuvatar-service/src/handlers/status.rs
+expression: status_res
+---
+version: 3.5.1
+tileset_last_modified: 1756439278
+available_actions:
+  - status
+  - centroid
+  - expansion
+  - transit_available
+  - trace_attributes
+  - trace_route
+  - isochrone
+  - optimized_route
+  - sources_to_targets
+  - height
+  - route
+  - locate
