@@ -105,6 +105,9 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0xf5, 0x76, 0xb1, 0x68, 0x01, 0x00, 0x00, 0x00,
         ];
         let parsed: HttpRequestInfo = transmute!(MESSAGE);
-        insta::assert_debug_snapshot!(parsed);
+
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(parsed);
+        }
     }
 }

@@ -98,6 +98,9 @@ mod tests {
         let result = serialize_http(req_info, StatusCode::OK, headers, BODY.to_vec());
 
         let reesult_utf8 = String::from_utf8(result).expect("Expected a UTF-8 result.");
-        insta::assert_snapshot!(reesult_utf8);
+
+        if !cfg!(miri) {
+            insta::assert_snapshot!(reesult_utf8);
+        }
     }
 }

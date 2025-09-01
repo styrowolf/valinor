@@ -100,6 +100,9 @@ mod tests {
         );
 
         let status_res: StatusResponse = serde_json::from_slice(&body).unwrap();
-        insta::assert_yaml_snapshot!(status_res);
+
+        if !cfg!(miri) {
+            insta::assert_yaml_snapshot!(status_res);
+        }
     }
 }

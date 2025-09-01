@@ -35,6 +35,9 @@ mod tests {
             0x72, 0x6f, 0x75, 0x74, 0x65, 0x42, 0x6, 0x6c, 0x6f, 0x63, 0x61, 0x74, 0x65,
         ];
         let result = Api::decode(MESSAGE).expect("Failed to decode message");
-        insta::assert_debug_snapshot!(result);
+
+        if !cfg!(miri) {
+            insta::assert_debug_snapshot!(result);
+        }
     }
 }
