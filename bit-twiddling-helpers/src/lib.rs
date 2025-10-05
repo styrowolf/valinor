@@ -1,4 +1,4 @@
-///! Helpers for converting between native integers and zerocopy endian-aware helpers.
+//! Helpers for converting between native integers and zerocopy endian-aware helpers.
 
 pub mod conv_u64le {
     use zerocopy::{LE, U64};

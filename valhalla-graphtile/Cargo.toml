@@ -10,6 +10,7 @@ serde = ["dep:serde"]
 serialize_predicted_speed = ["serde"]
 
 [dependencies]
+base64 = { workspace = true }
 self_cell = "1.2.0"
 thiserror = { workspace = true }
 geo = { workspace = true }
@@ -24,6 +25,7 @@ zerocopy-derive = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+proptest = { workspace = true }
 rand = { workspace = true }
 
 [lints]

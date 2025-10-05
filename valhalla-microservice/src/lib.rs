@@ -16,13 +16,26 @@ use valhalla_proto::prost::Message;
 
 /// A Valhalla-compatible microservice.
 pub struct ValhallaMicroservice<F: Fn(Api) -> WorkerResult> {
-    /// The listener zmq socket.
-    /// In the Valhalla configuration,
-    /// this is typically named `<service>_out` (e.g., `odin_out`).
+    /// The ZMQ socket upstream from this service.
     ///
     /// The service connects to this to listen for messages from upstream services.
-    listener: DealerSocket,
-    // TODO: Downstream socket (not used by all services)
+    /// For example, in Valhalla, `odin` (narrative generation)
+    /// receives messages from `thor` (path finding).
+    ///
+    /// In the standard Valhalla configuration,
+    /// this is typically named `<this service>_out` (e.g., `thor_out`),
+    /// which can be a bit confusing.
+    upstream: DealerSocket,
+    /// The ZMQ socket downstream from this service.
+    ///
+    /// The service uses this to push messages to downstream services.
+    /// For example, in Valhalla, `thor` (path finding)
+    /// pushes messages to `odin` (narrative generation).
+    ///
+    /// In the standard Valhalla configuration,
+    /// this is typically named `<downstream service>_in` (e.g., `odin_in`),
+    /// which can be a bit confusing.
+    downstream: Option<DealerSocket>,
     // TODO: Interrupt socket
     /// The loopback zmq socket.
     ///
@@ -36,7 +49,7 @@ pub struct ValhallaMicroservice<F: Fn(Api) -> WorkerResult> {
 impl<F: Fn(Api) -> WorkerResult> ValhallaMicroservice<F> {
     /// Advertises our presence to the upstream service, indicating we are ready for the next message.
     async fn advertise(&mut self) -> ZmqResult<()> {
-        self.listener.send(ZmqMessage::from("")).await
+        self.upstream.send(ZmqMessage::from("")).await
     }
 
     /// Run one iteration of the main "loop" for this service.
@@ -53,7 +66,7 @@ impl<F: Fn(Api) -> WorkerResult> ValhallaMicroservice<F> {
     /// and no further requests will be sent.
     /// At this point, the most reasonable action for the caller is to gracefully exit as well.
     ///
-    /// ZeroMQ errors describe the failure modes particular to ZeroMQ.
+    /// ZeroMQ errors describe the failure modes that are specific to ZeroMQ.
     /// Notably, these *may* not be as serious as the initial connection errors
     /// (in which case the service can't be started).
     /// Whether to continue is left up to the caller.
@@ -76,13 +89,15 @@ impl<F: Fn(Api) -> WorkerResult> ValhallaMicroservice<F> {
         // Receive and decode the message
         //
 
-        let message = self.listener.recv().await?;
+        // TODO: Set up a monitor instead so we've got a channel (stream)!
+        // let mut monitor = self.upstream.monitor();
+        let message = self.upstream.recv().await?;
         let mut frames = message.into_vecdeque(); // Zero cost unwrap
 
         // Sanity checks
         if frames.len() != 2 {
             return Err(Error::InvalidMessage(format!(
-                "Expected a multi-part message with two frames (a header struct and an Api protobuf); got {} frames instead",
+                "Expected a multipart message with two frames (a header struct and an Api protobuf); got {} frames instead",
                 frames.len()
             )));
         }
@@ -139,18 +154,38 @@ impl<F: Fn(Api) -> WorkerResult> ValhallaMicroservice<F> {
 }
 
 pub struct ValhallaMicroserviceBuilder<'a> {
-    listener_socket_endpoint: &'a str,
+    upstream_socket_endpoint: &'a str,
+    downstream_socket_endpoint: Option<&'a str>,
     loopback_socket_endpoint: &'a str,
 }
 
-impl ValhallaMicroserviceBuilder<'_> {
-    pub fn new<'a>(
-        listener_socket_endpoint: &'a str,
+impl<'a> ValhallaMicroserviceBuilder<'a> {
+    /// Initializes a Valhalla microservice builder.
+    ///
+    /// The required socket endpoints are typically IPC sockets like `ipc:///tmp/odin_out`
+    /// and `ipc:///tmp/loopback`.
+    pub fn new(
+        upstream_socket_endpoint: &'a str,
         loopback_socket_endpoint: &'a str,
     ) -> ValhallaMicroserviceBuilder<'a> {
         ValhallaMicroserviceBuilder {
-            listener_socket_endpoint,
+            upstream_socket_endpoint,
+            downstream_socket_endpoint: None,
             loopback_socket_endpoint,
+        }
+    }
+
+    /// Adds a downstream endpoint.
+    ///
+    /// Terminal (last in the chain) services never need this,
+    /// but others do.
+    pub fn with_downstream_socket_endpoint(
+        self,
+        downstream_socket_endpoint: &'a str,
+    ) -> ValhallaMicroserviceBuilder<'a> {
+        ValhallaMicroserviceBuilder {
+            downstream_socket_endpoint: Some(downstream_socket_endpoint),
+            ..self
         }
     }
 
@@ -159,7 +194,7 @@ impl ValhallaMicroserviceBuilder<'_> {
     /// # Rules for worker functions
     ///
     /// - Don't panic; neither this crate nor Valhalla have well-defined behavior for this failure mode.
-    /// - The usual Tokio rules for async contexts. Spawn a blocking thread for long-running CPU-heavy operations.
+    /// - The usual Tokio rules for async contexts. If you're going to be working for a while, spawn a blocking thread, use a pool, channels, etc. rather than blocking.
     ///
     /// # Errors
     ///
@@ -168,13 +203,23 @@ impl ValhallaMicroserviceBuilder<'_> {
         self,
         worker_fn: F,
     ) -> ZmqResult<ValhallaMicroservice<F>> {
-        let mut listener = DealerSocket::new();
-        listener.connect(self.listener_socket_endpoint).await?;
+        let mut upstream = DealerSocket::new();
+        upstream.connect(self.upstream_socket_endpoint).await?;
+
+        let downstream = if let Some(downstream_socket_endpoint) = self.downstream_socket_endpoint {
+            let mut sock = DealerSocket::new();
+            sock.connect(downstream_socket_endpoint).await?;
+            Some(sock)
+        } else {
+            None
+        };
+
         let mut loopback = PushSocket::new();
         loopback.connect(self.loopback_socket_endpoint).await?;
 
         Ok(ValhallaMicroservice {
-            listener,
+            upstream,
+            downstream,
             loopback,
             worker_fn,
         })

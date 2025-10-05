@@ -18,7 +18,7 @@ mod handlers;
 struct Cli {
     /// The upstream socket to listen on.
     #[arg(env, long, default_value = "ipc:///tmp/odin_out")]
-    listener_socket_endpoint: String,
+    upstream_socket_endpoint: String,
 
     /// The Valhalla loopback socket endpoint.
     #[arg(env, long, default_value = "ipc:///tmp/loopback")]
@@ -28,7 +28,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let listener_socket_endpoint = &cli.listener_socket_endpoint;
+    let upstream_socket_endpoint = &cli.upstream_socket_endpoint;
     let loopback_socket_endpoint = &cli.loopback_socket_endpoint;
 
     tracing_subscriber::registry()
@@ -38,11 +38,11 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let service_builder =
-        ValhallaMicroserviceBuilder::new(listener_socket_endpoint, loopback_socket_endpoint);
+        ValhallaMicroserviceBuilder::new(upstream_socket_endpoint, loopback_socket_endpoint);
     let mut service = service_builder.build(handle_message).await?;
 
     info!(
-        "Ilúvatar service started (listen = {listener_socket_endpoint}, loopback = {loopback_socket_endpoint})"
+        "Ilúvatar service started (upstream = {upstream_socket_endpoint}, loopback = {loopback_socket_endpoint})"
     );
 
     loop {

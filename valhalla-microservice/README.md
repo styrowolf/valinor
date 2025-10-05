@@ -14,21 +14,24 @@ Pretty clever design!
 
 All communication happens via ZeroMQ.
 The classic `valhalla_service` is a single process running all the services,
-but the communication is over UNIX sockets by default, and can even use other transport supported by ZeroMQ.
+but it doesn't have to be this way.
+In fact, all the communication happens over ZeroMQ,
+so you can run each service in a separate process,
+or even on a different machine.
 
 On top of ZeroMQ as the base layer,
 Valhalla uses [`prime_server`](https://github.com/kevinkreiser/prime_server)
-to define "workers" (the service entry point + event processing loop),
+to define "workers" (the service's processing loop),
 and handle the work distribution.
 
-In addition to the standard Valhalla Protobuf messages,
-`prime_server` also includes some other messages like `http_request_info_t`.
-Both the `prime_server` C++ helpers and this crate abstract away the details
-so you can focus on the service logic.
+The services are effectively chained together via these sockets,
+passing along multi-part ZMQ messages with a header and a protobuf payload.
+These get updated as the message is processed,
+and the final response is sent back to the client.
 
 ## Crate Design Choices
 
 - We do not wrap the underlying C++ libraries; everything is implemented in Rust
 - We're using the pure Rust implementation of ZeroMQ, even though it's experimental
   (this really just means it doesn't have feature parity, not that it is unsafe to use)
-- We use [tracing](https://github.com/tokio-rs/tracing), and enable configuration with [`RUST_LOG`](https://docs.rs/env_logger/latest/env_logger/#enabling-logging)
+- We use [tracing](https://github.com/tokio-rs/tracing), and (for binaries) enable configuration with [`RUST_LOG`](https://docs.rs/env_logger/latest/env_logger/#enabling-logging)
