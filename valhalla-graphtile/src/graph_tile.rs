@@ -1,5 +1,5 @@
 use thiserror::Error;
-use zerocopy::{FromBytes, LE, U64, transmute};
+use zerocopy::{FromBytes, I16, LE, U32, U64, transmute};
 
 use enumset::EnumSet;
 use self_cell::self_cell;
@@ -18,11 +18,13 @@ mod directed_edge;
 mod edge_info;
 mod header;
 mod node;
+pub mod predicted_speeds;
 mod sign;
 mod transit;
 mod turn_lane;
 
-use crate::{
+use crate::graph_tile::predicted_speeds::{COEFFICIENT_COUNT, PredictedSpeeds};
+pub use crate::{
     Access,
     graph_id::{GraphId, InvalidGraphIdError},
 };
@@ -103,13 +105,26 @@ pub trait GraphTile {
     /// or the index is invalid.
     fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError>;
 
-    /// Gets access restriction for a directed edge
-    /// which apply to *any* of the supplied access modes (ex: auto, bicycle, etc.).
+    /// Gets access restrictions for a directed edge.
+    ///
+    /// The returned list includes restrictions that apply
+    /// to *any* of the supplied access modes (ex: auto, bicycle, etc.).
     fn get_access_restrictions(
         &self,
         directed_edge_index: u32,
         access_modes: EnumSet<Access>,
     ) -> Vec<&AccessRestriction>;
+
+    /// Gets predicted speed information for a directed edge.
+    ///
+    /// `seconds_from_start_of_week` is measured from midnight Sunday **local time**.
+    /// The output is measured in kilometers per hour.
+    /// Returns `None` if the edge at this index does not have predicted speed information.
+    fn get_predicted_speed(
+        &self,
+        directed_edge_index: usize,
+        seconds_from_start_of_week: u32,
+    ) -> Option<f32>;
 
     /// Gets edge info for a directed edge.
     ///
@@ -186,6 +201,16 @@ impl GraphTile for OwnedGraphTile {
     }
 
     #[inline]
+    fn get_predicted_speed(
+        &self,
+        directed_edge_index: usize,
+        seconds_from_start_of_week: u32,
+    ) -> Option<f32> {
+        self.borrow_dependent()
+            .get_predicted_speed(directed_edge_index, seconds_from_start_of_week)
+    }
+
+    #[inline]
     fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo<'_>, GraphTileError> {
         self.borrow_dependent().get_edge_info(directed_edge)
     }
@@ -236,7 +261,7 @@ struct GraphTileView<'a> {
     // TODO: Complex reverse restrictions
     // TODO: Street names (names here)
     // TODO: Lane connectivity
-    // TODO: Predicted speeds
+    predicted_speeds: Option<PredictedSpeeds<'a>>,
     // TODO: Stop one stops(?)
     // TODO: Route one stops(?)
     // TODO: Operator one stops(?)
@@ -326,6 +351,20 @@ impl GraphTile for GraphTileView<'_> {
             .take_while(|e| e.edge_index() == directed_edge_index)
             .filter(|e| !e.affected_access_modes().is_disjoint(access_modes))
             .collect()
+    }
+
+    fn get_predicted_speed(
+        &self,
+        directed_edge_index: usize,
+        seconds_from_start_of_week: u32,
+    ) -> Option<f32> {
+        self.predicted_speeds.and_then(|ps| {
+            if self.directed_edges[directed_edge_index].has_predicted_speed() {
+                ps.speed(directed_edge_index, seconds_from_start_of_week)
+            } else {
+                None
+            }
+        })
     }
 
     fn get_edge_info(&self, directed_edge: &DirectedEdge) -> Result<EdgeInfo<'_>, GraphTileError> {
@@ -446,6 +485,35 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
         let raw_graph_id: U64<LE> = transmute!(slice);
         let edge_bins = GraphId::try_from_id(raw_graph_id.get())?;
 
+        // TODO: Complex forward restrictions
+        // TODO: Complex reverse restrictions
+        // TODO: Street names (names here)
+        // TODO: Lane connectivity
+
+        let predicted_speeds = if header.predicted_speeds_count() > 0 {
+            let predicted_speed_offset = header.predicted_speeds_offset.get() as usize;
+            // Curiously, these seem to actually be unaligned in a Valhalla tile I generated!
+            let (offsets, profile_data) = <[U32<LE>]>::ref_from_prefix_with_elems(
+                &bytes[predicted_speed_offset..],
+                header.directed_edge_count() as usize,
+            )
+            .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+
+            let (profiles, _) = <[I16<LE>]>::ref_from_prefix_with_elems(
+                profile_data,
+                header.predicted_speeds_count() as usize * COEFFICIENT_COUNT,
+            )
+            .map_err(|e| GraphTileError::CastError(e.to_string()))?;
+
+            Some(PredictedSpeeds::new(offsets, profiles))
+        } else {
+            None
+        };
+
+        // TODO: Stop one stops(?)
+        // TODO: Route one stops(?)
+        // TODO: Operator one stops(?)
+
         Ok(Self {
             memory: bytes,
             header,
@@ -463,6 +531,7 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
             turn_lanes,
             admins,
             edge_bins,
+            predicted_speeds,
         })
     }
 }
@@ -484,10 +553,38 @@ static TEST_GRAPH_TILE: LazyLock<OwnedGraphTile> = LazyLock::new(|| {
     OwnedGraphTile::try_from(bytes).expect("Unable to get tile")
 });
 
+/// Test data note: this relies on a binary fixture
+/// where speed info is added to the Andorra tiles using the `valhalla_add_predicted_traffic`
+/// utility.
+///
+/// The contents of the file `0/003/015.csv` used to generate the test fixture are as follows:
+///
+/// ```csv
+/// 0/3015/0,50,40,
+/// 0/3015/42,100,42,BcUACQAEACEADP/7/9sAGf/fAAwAGwARAAX/+AAAAB0AFAAS//AAF//+ACwACQAqAAAAKP/6AEMABABsAAsBBAAq/rcAAP+bAAz/zv/s/9MABf/Y//X/8//9/+wACf/P//EADv/8//L//P/y//H////7AAwAFf/5//oADgAZAAQAFf/3/+8AB//yAB8ABv/0AAUAEf/8//QAFAAG//b////j//v//QAT//7/+f/kABMABwABAAv/6//8//cAEwAAABT/8v/6//wAAAAQ//cACwAFAAT/1//sAAEADAABAAYAE//9AAn/7gAH/+AAFQAB//4AC//o/+gAE//+AAAAFf/l//kABP/+//kACAAG//cAHv/qAB0AAv/4/+v/+wALAAMABP/3AAT/8wAIAAr/9wAK//j/+wAEAAD/+P/8//v/8f/2//L//AALAAcABgAG//gAAv/5AAoAHv//AAcAFf/zABD/7AAUAAv/7v/8AAgACAAN//0ADP/iABD/9f/3//7/+P/3AAQADP//AAMABw==
+/// 0/3015/7,12,34,CKD/4f/r/+H/6//g/+v/4P/q/9//6v/f/+r/3v/q/93/6f/b/+n/2v/o/9f/5//V/+b/0f/l/8z/4//G/+D/vf/d/67/1/+V/8z/Xf+u/nz+GwLJAEcAqwAWAFwABwA8AAAAK//8ACD/+AAZ//YAE//0AA//8gAM//AACf/uAAb/7AAE/+kAAv/m////4v/9/93/+f/U//T/xf/q/5//y/6PAQMAngApADkAFwAfABAAEwAMAAwACQAHAAcAAwAGAAAABf/9AAT/+wAD//kAA//2AAL/9AAC//EAAf/tAAH/6AAA/+EAAP/U////tv///x8AFADL//8AQ///ACf//gAa//4AE//+AA7//QAL//0ACP/9AAb//AAE//wAAv/8AAD/+//+//v//P/6//r/+v/2//n/8v/4/+v/9f/b/+//nP+TALoADAAyAAMAHgAAABX//gAQ//0ADf/9AAv//AAJ//sAB//7AAb/+gAF//kABP/4AAP/9wAC//YAAf/1AAD/8//+//D//P/q//f/2w==
+/// ```
+#[cfg(test)]
+static TEST_GRAPH_TILE_WITH_FLOW: LazyLock<OwnedGraphTile> = LazyLock::new(|| {
+    let relative_path = TEST_GRAPH_TILE_ID
+        .file_path("gph")
+        .expect("Unable to get relative path");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join("andorra-tiles-with-traffic")
+        .join(relative_path);
+    let bytes = std::fs::read(path).expect("Unable to read file");
+
+    OwnedGraphTile::try_from(bytes).expect("Unable to get tile")
+});
+
 #[cfg(test)]
 mod tests {
     use crate::Access;
-    use crate::graph_tile::{GraphTile, TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID};
+    use crate::graph_tile::predicted_speeds::BUCKETS_PER_WEEK;
+    use crate::graph_tile::{
+        GraphTile, TEST_GRAPH_TILE, TEST_GRAPH_TILE_ID, TEST_GRAPH_TILE_WITH_FLOW,
+    };
     use enumset::{EnumSet, enum_set};
 
     #[test]
@@ -604,5 +701,204 @@ mod tests {
         }
 
         assert_eq!(other_edge_info.way_id(), 28833880);
+    }
+
+    #[test]
+    fn test_predicted_speed_access_when_absent_in_tile() {
+        let tile = &*TEST_GRAPH_TILE;
+        let tile_view = tile.borrow_dependent();
+
+        // The tile was built without speed information
+        assert_eq!(tile_view.get_predicted_speed(0, 0), None);
+
+        // The index is clearly invalid
+        assert_eq!(tile_view.get_predicted_speed(usize::MAX, 0), None);
+    }
+
+    #[test]
+    fn test_traffic_flow_speeds() {
+        let tile = &*TEST_GRAPH_TILE_WITH_FLOW;
+        let tile_view = tile.borrow_dependent();
+
+        const EDGE_INDEX: usize = 0;
+        let edge = &tile_view.directed_edges()[EDGE_INDEX];
+
+        assert_eq!(edge.free_flow_speed(), 50);
+        assert_eq!(edge.constrained_flow_speed(), 40);
+        assert_eq!(edge.has_predicted_speed(), false);
+
+        // This edge doesn't have any predicted speeds.
+        assert_eq!(tile_view.get_predicted_speed(EDGE_INDEX, 0), None);
+    }
+
+    #[test]
+    fn test_predicted_traffic_speeds() {
+        let tile = &*TEST_GRAPH_TILE_WITH_FLOW;
+        let tile_view = tile.borrow_dependent();
+
+        // We specifically added predicted speeds to this random edge index.
+        // See the test case info in the comment for TEST_GRAPH_TILE_WITH_FLOW.
+        const EDGE_INDEX: usize = 42;
+        let edge = &tile_view.directed_edges()[EDGE_INDEX];
+
+        assert_eq!(edge.free_flow_speed(), 100);
+        assert_eq!(edge.constrained_flow_speed(), 42);
+        assert_eq!(edge.has_predicted_speed(), true);
+
+        // A few predicted speed samples.
+        // See predicted_speeds.rs for the array of speeds that we expected to encode.
+        assert!(
+            tile_view
+                .get_predicted_speed(EDGE_INDEX, 0)
+                .is_some_and(|s| { (s - 36f32).abs() < 0.5 })
+        );
+
+        // 60 * 5 = number of seconds in a 5 minute block. We encode data in 5 min chunks.
+        assert!(
+            tile_view
+                .get_predicted_speed(EDGE_INDEX, 42 * 60 * 5)
+                .is_some_and(|s| { (s - 45f32).abs() < 0.5 })
+        );
+
+        assert!(
+            tile_view
+                .get_predicted_speed(EDGE_INDEX, 20 * 60 * 5)
+                .is_some_and(|s| { (s - 42f32).abs() < 0.5 })
+        );
+
+        // There are 2016 total buckets per week; this indexes into the last one (zero indexed)
+        assert!(
+            tile_view
+                .get_predicted_speed(EDGE_INDEX, 2016 * 60 * 5 - 1)
+                .is_some_and(|s| { (s - 29f32).abs() < 0.5 })
+        );
+    }
+
+    #[test]
+    fn test_predicted_traffic_speeds_second_profile() {
+        let tile = &*TEST_GRAPH_TILE_WITH_FLOW;
+        let tile_view = tile.borrow_dependent();
+
+        // We specifically added predicted speeds to another random edge index.
+        // See the test case info in the comment for TEST_GRAPH_TILE_WITH_FLOW.
+        const EDGE_INDEX: usize = 7;
+        let edge = &tile_view.directed_edges()[EDGE_INDEX];
+
+        assert_eq!(edge.free_flow_speed(), 12);
+        // No, this isn't intended to make sense; it's test data ;)
+        assert_eq!(edge.constrained_flow_speed(), 34);
+        assert_eq!(edge.has_predicted_speed(), true);
+
+        // Reconstruct the entire array of speeds.
+        let speeds: [i64; BUCKETS_PER_WEEK] = std::array::from_fn(|i| {
+            tile_view
+                .get_predicted_speed(EDGE_INDEX, (i as u32) * 300)
+                .unwrap() as i64
+        });
+
+        // Laying it all out, this highlights that the encoding is indeed quite.... lossy ;)
+        // This was originally a series going from 0 to 100 in a loop, sawtooth fashion.
+        // DCT is optimized for high compressibility of datasets which don't vary so wildly.
+        // As one would expect for datasets like speed variance over time.
+        assert_eq!(
+            speeds,
+            [
+                0, 0, 0, 1, 3, 4, 6, 8, 9, 11, 12, 13, 13, 14, 14, 14, 15, 15, 15, 16, 17, 18, 20,
+                21, 23, 25, 27, 28, 30, 31, 32, 33, 33, 34, 34, 34, 34, 35, 35, 36, 37, 38, 40, 41,
+                43, 45, 47, 49, 50, 52, 53, 53, 54, 54, 54, 54, 54, 54, 54, 55, 56, 57, 59, 61, 63,
+                66, 68, 70, 72, 73, 74, 74, 75, 74, 74, 73, 72, 72, 72, 72, 74, 75, 78, 81, 84, 87,
+                91, 94, 97, 99, 100, 99, 98, 94, 90, 84, 77, 69, 61, 52, 43, 35, 27, 20, 14, 9, 5,
+                3, 1, 1, 2, 4, 6, 8, 11, 13, 16, 18, 20, 22, 23, 24, 24, 25, 25, 25, 26, 26, 27,
+                27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 39, 40, 41, 42, 44, 45, 46, 47, 48, 48, 49,
+                50, 51, 51, 52, 52, 53, 54, 55, 56, 57, 58, 60, 61, 63, 64, 66, 68, 69, 70, 71, 72,
+                72, 72, 73, 72, 72, 72, 73, 73, 74, 75, 77, 80, 82, 85, 88, 91, 94, 96, 98, 98, 98,
+                96, 93, 89, 84, 77, 70, 62, 53, 45, 36, 28, 21, 15, 9, 5, 2, 1, 0, 1, 2, 4, 7, 10,
+                13, 16, 18, 21, 23, 24, 25, 26, 26, 26, 26, 26, 26, 26, 26, 27, 28, 29, 30, 32, 33,
+                35, 36, 38, 39, 41, 42, 43, 44, 45, 46, 47, 47, 48, 48, 49, 50, 50, 51, 52, 53, 54,
+                55, 56, 58, 59, 61, 62, 64, 65, 67, 68, 69, 70, 71, 71, 72, 72, 72, 72, 72, 72, 73,
+                74, 75, 76, 78, 80, 83, 86, 88, 91, 94, 96, 97, 97, 97, 95, 92, 88, 83, 77, 70, 62,
+                54, 45, 37, 29, 22, 15, 10, 5, 2, 0, 0, 0, 2, 4, 6, 9, 13, 16, 19, 21, 23, 25, 26,
+                26, 27, 27, 26, 26, 26, 26, 26, 26, 27, 28, 29, 31, 33, 34, 36, 38, 40, 42, 43, 44,
+                45, 46, 47, 47, 47, 48, 48, 48, 49, 50, 50, 51, 52, 54, 55, 56, 58, 60, 61, 63, 64,
+                66, 67, 68, 69, 70, 70, 71, 71, 71, 71, 71, 72, 72, 73, 74, 75, 77, 79, 81, 83, 86,
+                89, 91, 94, 95, 97, 97, 96, 95, 92, 88, 83, 77, 70, 62, 54, 46, 37, 30, 22, 16, 10,
+                5, 2, 0, 0, 0, 1, 3, 6, 9, 12, 15, 18, 21, 23, 25, 26, 27, 27, 27, 27, 26, 26, 26,
+                26, 26, 26, 27, 29, 30, 32, 34, 36, 38, 40, 42, 43, 45, 46, 46, 47, 47, 47, 48, 48,
+                48, 48, 49, 50, 51, 52, 53, 55, 56, 58, 60, 62, 63, 65, 66, 68, 68, 69, 70, 70, 70,
+                70, 70, 70, 71, 71, 71, 72, 73, 75, 77, 79, 81, 84, 87, 89, 92, 94, 96, 96, 97, 96,
+                94, 91, 87, 82, 76, 69, 62, 54, 46, 38, 30, 23, 16, 10, 6, 3, 0, 0, 0, 1, 3, 5, 8,
+                12, 15, 18, 21, 23, 25, 26, 27, 27, 27, 27, 27, 26, 26, 26, 26, 26, 27, 28, 30, 32,
+                34, 36, 38, 40, 42, 44, 45, 46, 47, 47, 48, 48, 48, 48, 48, 48, 49, 49, 50, 52, 53,
+                55, 56, 58, 60, 62, 64, 65, 67, 68, 69, 69, 70, 70, 70, 70, 70, 70, 70, 71, 71, 72,
+                73, 75, 77, 79, 82, 84, 87, 90, 92, 94, 96, 96, 96, 96, 94, 91, 87, 82, 76, 69, 62,
+                54, 46, 38, 30, 23, 16, 11, 6, 3, 1, 0, 0, 0, 2, 5, 8, 11, 15, 18, 21, 23, 25, 27,
+                28, 28, 28, 28, 27, 27, 26, 26, 26, 26, 27, 28, 30, 31, 33, 36, 38, 40, 42, 44, 45,
+                46, 47, 48, 48, 48, 48, 48, 48, 48, 49, 49, 50, 51, 53, 54, 56, 58, 60, 62, 64, 66,
+                67, 68, 69, 70, 70, 70, 70, 70, 70, 70, 70, 71, 71, 72, 73, 75, 77, 79, 82, 85, 87,
+                90, 92, 94, 96, 96, 96, 95, 93, 90, 86, 81, 76, 69, 62, 54, 46, 38, 30, 23, 17, 11,
+                7, 3, 1, 0, 0, 0, 2, 5, 8, 11, 14, 17, 20, 23, 25, 27, 28, 28, 28, 28, 27, 27, 26,
+                26, 26, 26, 27, 28, 29, 31, 33, 35, 38, 40, 42, 44, 45, 47, 48, 48, 48, 48, 48, 48,
+                48, 48, 48, 49, 50, 51, 52, 54, 56, 58, 60, 62, 64, 66, 67, 68, 69, 70, 70, 70, 70,
+                70, 70, 70, 70, 70, 71, 71, 73, 75, 77, 79, 82, 85, 87, 90, 93, 95, 96, 97, 97, 96,
+                93, 90, 86, 81, 75, 69, 61, 54, 46, 38, 31, 23, 17, 11, 7, 3, 1, 0, 0, 0, 2, 4, 7,
+                11, 14, 17, 20, 23, 25, 27, 28, 28, 28, 28, 28, 27, 27, 26, 26, 26, 27, 28, 29, 31,
+                33, 35, 37, 40, 42, 44, 45, 47, 48, 48, 49, 49, 49, 48, 48, 48, 48, 49, 49, 51, 52,
+                54, 55, 58, 60, 62, 64, 66, 67, 69, 70, 70, 71, 71, 71, 70, 70, 70, 70, 70, 70, 71,
+                73, 74, 77, 79, 82, 85, 88, 90, 93, 95, 96, 97, 97, 96, 94, 90, 86, 81, 75, 68, 61,
+                54, 46, 38, 31, 24, 17, 12, 7, 4, 1, 0, 0, 1, 2, 5, 7, 10, 14, 17, 20, 22, 25, 26,
+                27, 28, 28, 28, 28, 27, 27, 26, 26, 26, 27, 28, 29, 31, 32, 35, 37, 39, 41, 44, 45,
+                47, 48, 48, 49, 49, 49, 49, 48, 48, 48, 49, 49, 50, 52, 53, 55, 57, 59, 62, 64, 66,
+                68, 69, 70, 71, 71, 71, 71, 70, 70, 70, 69, 69, 70, 71, 72, 74, 76, 79, 82, 85, 88,
+                91, 93, 95, 97, 97, 97, 96, 94, 90, 86, 81, 75, 68, 61, 53, 45, 38, 30, 23, 17, 12,
+                7, 4, 1, 0, 0, 1, 2, 5, 7, 10, 14, 17, 20, 22, 25, 26, 28, 28, 29, 29, 28, 28, 27,
+                27, 26, 26, 27, 28, 29, 30, 32, 34, 37, 39, 41, 43, 45, 47, 48, 49, 49, 49, 49, 49,
+                49, 49, 49, 49, 49, 50, 52, 53, 55, 57, 59, 62, 64, 66, 68, 69, 70, 71, 71, 71, 71,
+                71, 70, 70, 70, 70, 70, 71, 72, 74, 76, 79, 82, 85, 88, 91, 93, 95, 97, 98, 97, 96,
+                94, 91, 86, 81, 75, 68, 61, 53, 45, 37, 30, 23, 17, 12, 7, 4, 2, 0, 0, 1, 2, 5, 7,
+                10, 13, 17, 20, 22, 24, 26, 28, 28, 29, 29, 28, 28, 27, 27, 27, 27, 27, 28, 29, 31,
+                32, 34, 37, 39, 41, 43, 45, 47, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49, 49, 50, 51,
+                53, 55, 57, 59, 61, 64, 66, 67, 69, 70, 71, 71, 71, 71, 71, 70, 70, 70, 70, 70, 71,
+                72, 74, 76, 79, 81, 85, 88, 91, 93, 96, 97, 98, 98, 96, 94, 91, 86, 81, 75, 68, 60,
+                53, 45, 37, 30, 23, 17, 12, 7, 4, 2, 1, 1, 1, 3, 5, 7, 10, 13, 16, 19, 22, 24, 26,
+                27, 28, 28, 28, 28, 28, 27, 27, 27, 27, 27, 28, 29, 31, 32, 34, 37, 39, 41, 43, 45,
+                46, 48, 49, 49, 49, 49, 49, 49, 49, 49, 49, 50, 50, 51, 53, 55, 57, 59, 61, 64, 66,
+                68, 69, 70, 71, 72, 72, 71, 71, 70, 70, 70, 69, 70, 70, 72, 73, 76, 78, 81, 84, 88,
+                91, 94, 96, 97, 98, 98, 97, 94, 91, 86, 81, 75, 68, 60, 53, 45, 37, 30, 23, 17, 12,
+                7, 4, 2, 1, 1, 1, 3, 5, 7, 10, 13, 16, 19, 22, 24, 26, 27, 28, 28, 28, 28, 28, 28,
+                27, 27, 27, 27, 28, 29, 30, 32, 34, 36, 38, 41, 43, 45, 46, 48, 49, 49, 50, 50, 50,
+                49, 49, 49, 49, 50, 50, 51, 53, 54, 56, 59, 61, 63, 65, 67, 69, 70, 71, 72, 72, 72,
+                71, 71, 70, 70, 70, 70, 71, 72, 73, 76, 78, 81, 84, 88, 91, 93, 96, 97, 98, 98, 97,
+                94, 91, 86, 81, 75, 68, 60, 52, 44, 37, 29, 23, 17, 12, 7, 4, 2, 1, 1, 2, 3, 5, 8,
+                11, 13, 16, 19, 22, 24, 26, 27, 28, 28, 28, 28, 28, 28, 27, 27, 27, 28, 28, 29, 31,
+                32, 34, 36, 38, 41, 43, 45, 46, 48, 49, 49, 50, 50, 50, 50, 49, 49, 49, 50, 50, 51,
+                53, 54, 56, 58, 61, 63, 65, 67, 69, 70, 71, 72, 72, 72, 71, 71, 70, 70, 70, 70, 70,
+                71, 73, 75, 78, 81, 84, 87, 90, 93, 96, 97, 98, 98, 97, 95, 91, 87, 81, 75, 68, 60,
+                52, 44, 37, 29, 23, 17, 12, 7, 4, 2, 1, 1, 2, 3, 5, 8, 11, 13, 16, 19, 21, 23, 25,
+                27, 27, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29, 30, 31, 32, 34, 36, 38, 40, 42, 44,
+                46, 47, 48, 49, 49, 50, 50, 50, 50, 50, 50, 50, 51, 52, 53, 54, 56, 58, 61, 63, 65,
+                67, 69, 70, 71, 72, 72, 72, 72, 71, 71, 70, 70, 70, 71, 72, 73, 75, 78, 81, 84, 87,
+                90, 93, 96, 97, 98, 98, 97, 95, 91, 87, 81, 75, 68, 60, 52, 44, 36, 29, 22, 16, 11,
+                7, 4, 2, 1, 1, 2, 4, 6, 8, 11, 13, 16, 19, 21, 23, 25, 26, 27, 28, 28, 28, 28, 28,
+                28, 28, 28, 28, 29, 30, 31, 32, 34, 36, 38, 40, 42, 44, 45, 47, 48, 49, 49, 50, 50,
+                50, 50, 50, 50, 50, 51, 52, 53, 54, 56, 58, 60, 63, 65, 67, 69, 70, 71, 72, 72, 72,
+                72, 71, 71, 70, 70, 70, 70, 71, 73, 75, 77, 80, 83, 87, 90, 93, 96, 97, 99, 99, 97,
+                95, 92, 87, 82, 75, 68, 60, 52, 44, 36, 29, 22, 16, 11, 7, 4, 2, 1, 2, 2, 4, 6, 8,
+                11, 14, 16, 19, 21, 23, 25, 26, 27, 27, 28, 28, 28, 28, 28, 28, 28, 28, 29, 30, 31,
+                33, 34, 36, 38, 40, 42, 44, 45, 47, 48, 49, 49, 50, 50, 50, 50, 50, 50, 51, 51, 52,
+                53, 54, 56, 58, 60, 62, 64, 66, 68, 70, 71, 72, 72, 72, 72, 72, 71, 71, 70, 70, 71,
+                72, 73, 75, 77, 80, 83, 86, 90, 93, 95, 97, 98, 99, 98, 95, 92, 88, 82, 75, 68, 60,
+                52, 44, 36, 29, 22, 16, 11, 7, 4, 2, 2, 2, 3, 4, 6, 9, 11, 14, 17, 19, 21, 23, 25,
+                26, 26, 27, 27, 27, 28, 28, 28, 28, 28, 29, 29, 30, 31, 33, 34, 36, 38, 40, 42, 43,
+                45, 46, 48, 49, 49, 50, 50, 50, 50, 50, 51, 51, 51, 52, 53, 54, 56, 58, 60, 62, 64,
+                66, 68, 70, 71, 72, 72, 73, 73, 72, 72, 71, 71, 71, 71, 72, 73, 75, 77, 80, 83, 86,
+                89, 93, 95, 97, 99, 99, 98, 96, 93, 88, 82, 76, 68, 60, 52, 44, 36, 28, 21, 15, 10,
+                6, 4, 2, 2, 2, 3, 5, 7, 9, 12, 14, 17, 19, 21, 23, 24, 25, 26, 26, 27, 27, 27, 28,
+                28, 28, 29, 29, 30, 31, 32, 33, 35, 36, 38, 39, 41, 43, 44, 46, 47, 48, 49, 50, 50,
+                51, 51, 51, 51, 52, 52, 53, 53, 54, 55, 57, 59, 61, 63, 65, 67, 69, 71, 72, 73, 73,
+                73, 73, 73, 72, 72, 71, 71, 71, 72, 73, 75, 78, 81, 85, 88, 92, 95, 98, 100, 101,
+                100, 98, 95, 90, 83, 76, 68, 59, 50, 41, 33, 25, 19, 13, 9, 6, 5, 4, 5, 6, 8, 9,
+                11, 12, 12
+            ]
+        )
     }
 }
