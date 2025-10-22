@@ -11,6 +11,7 @@ serialize_predicted_speed = ["serde"]
 
 [dependencies]
 base64 = { workspace = true }
+chrono = "0.4.42"
 self_cell = "1.2.0"
 thiserror = { workspace = true }
 geo = { workspace = true }
@@ -28,6 +29,7 @@ zerocopy-derive = { workspace = true }
 insta = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
+walkdir = "2.5.0"
 
 [lints]
 workspace = true

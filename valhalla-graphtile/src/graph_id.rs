@@ -1,9 +1,11 @@
 use crate::tile_hierarchy::{STANDARD_LEVELS, TRANSIT_LEVEL};
 #[cfg(feature = "serde")]
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use thiserror::Error;
+use zerocopy::{LE, U64};
+use zerocopy_derive::{Immutable, IntoBytes, Unaligned};
 
 /// The max valid hierarchy level.
 ///
@@ -66,9 +68,9 @@ pub enum InvalidGraphIdError {
 ///```
 ///
 /// Note that there are only 46 used bits in the scheme (ask Valhalla's authors why 46).
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct GraphId(u64);
+#[repr(C)]
+#[derive(IntoBytes, Immutable, Unaligned, Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct GraphId(U64<LE>);
 
 impl GraphId {
     // TBD: Should we use u64 everywhere? We need to cast AND bounds check anyway.
@@ -93,7 +95,9 @@ impl GraphId {
         } else if index > MAX_TILE_INDEX {
             Err(InvalidGraphIdError::TileIndex)
         } else {
-            Ok(Self(level as u64 | (tile_id << 3) | index << 25))
+            Ok(Self(U64::<LE>::new(
+                level as u64 | (tile_id << 3) | index << 25,
+            )))
         }
     }
 
@@ -104,7 +108,7 @@ impl GraphId {
     /// Invalid values risk things like out-of-bounds level indexes,
     /// which could cause crashes or other unexpected behavior.
     pub const unsafe fn from_components_unchecked(level: u8, tile_id: u64, index: u64) -> Self {
-        Self(level as u64 | (tile_id << 3) | index << 25)
+        Self(U64::<LE>::new(level as u64 | (tile_id << 3) | index << 25))
     }
 
     /// Creates a graph ID from the given raw value.
@@ -117,7 +121,7 @@ impl GraphId {
             return Err(InvalidGraphIdError::InvalidGraphId);
         }
 
-        let result = GraphId(id);
+        let result = GraphId(U64::<LE>::new(id));
         if result.level() > MAX_HIERARCHY_LEVEL {
             Err(InvalidGraphIdError::Level)
         } else if result.tile_id() > MAX_GRAPH_TILE_ID {
@@ -135,7 +139,7 @@ impl GraphId {
     ///
     /// Invalid values risk things like out-of-bounds level indexes,
     /// which could cause crashes or other unexpected behavior.
-    pub const unsafe fn from_id_unchecked(id: u64) -> Self {
+    pub const unsafe fn from_id_unchecked(id: U64<LE>) -> Self {
         Self(id)
     }
 
@@ -153,7 +157,7 @@ impl GraphId {
     /// Extracts the raw (packed) graph ID value.
     #[inline]
     pub const fn value(&self) -> u64 {
-        self.0
+        self.0.get()
     }
 
     /// Gets the hierarchy level.
@@ -180,7 +184,7 @@ impl GraphId {
     #[inline]
     #[must_use]
     pub const fn tile_base_id(&self) -> GraphId {
-        GraphId(self.value() & 0x01ff_ffff)
+        GraphId(U64::<LE>::new(self.value() & 0x01ff_ffff))
     }
 
     /// Constructs a relative path for the given tile.
@@ -237,6 +241,16 @@ impl Display for GraphId {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for GraphId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.0.get())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,7 +285,7 @@ mod tests {
             panic!("Expected that we would construct a valid graph ID.")
         };
 
-        assert_eq!(graph_id, GraphId(0));
+        assert_eq!(graph_id, GraphId(0.into()));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
         assert_eq!(graph_id.index(), 0);
@@ -289,7 +303,7 @@ mod tests {
             graph_id,
             // Note: only 46 bits actually used
             // TODO: HUH??
-            GraphId(INVALID_GRAPH_ID)
+            GraphId(INVALID_GRAPH_ID.into())
         );
         assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
         assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
@@ -303,7 +317,7 @@ mod tests {
             panic!("Expected that we would construct a valid graph ID.")
         };
 
-        assert_eq!(graph_id, GraphId(16889572344463360));
+        assert_eq!(graph_id, GraphId(16889572344463360.into()));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
         assert_eq!(graph_id.index(), 32000);
