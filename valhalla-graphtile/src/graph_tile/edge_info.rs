@@ -184,7 +184,10 @@ impl<'a> TryFrom<(&'a [u8], &'a [u8])> for EdgeInfo<'a> {
             &bytes[INNER_SIZE..],
             inner.second_inner_bitfield.name_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "name_info_list".to_string(),
+            error_description: e.to_string(),
+        })?;
 
         let offset = 0;
         let (encoded_shape, offset) = {

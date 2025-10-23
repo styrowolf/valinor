@@ -10,8 +10,9 @@ use crate::graph_tile::predicted_speeds::{
 };
 use chrono::{DateTime, Utc};
 use geo::Coord;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::borrow::Cow;
-use zerocopy::{I16, IntoBytes, LE, U32};
+use zerocopy::{I16, Immutable, IntoBytes, LE, U32};
 
 /// The writer version.
 ///
@@ -164,6 +165,13 @@ impl<'a> From<&'a GraphTileHandle> for GraphTileBuilder<'a> {
 }
 
 impl GraphTileBuilder<'_> {
+    /// The Graph ID for the tile.
+    ///
+    /// This is guaranteed to always be a base ID.
+    pub fn graph_id(&self) -> GraphId {
+        self.graph_id
+    }
+
     /// Sets the version string to encode in the graph tile.
     ///
     /// This is purely metadata and is not used by Valhalla to determine compatibility.
@@ -307,10 +315,11 @@ impl GraphTileBuilder<'_> {
         result
     }
 
-
-    /// Serializes the tile as owned bytes.
+    /// Yields the raw bytes of a full tile in the order they should be stored on disk.
     ///
-    /// NOTE: This allocates somewhere on the order of 2x the final tile size while building the tile.
+    /// This API is not perfectly lazy down to the byte level,
+    /// but minimizes allocations by using a shared buffer no larger than the largest section
+    /// (e.g. nodes, directed edges, names, etc.) of the file.
     ///
     /// # Errors
     ///
@@ -323,74 +332,8 @@ impl GraphTileBuilder<'_> {
     /// * Setting a creation date more than 11,758,979.59 years after January 1, 2014
     ///
     /// TL;DR, things that you really shouldn't do, or are a clear programming error.
-    pub fn into_bytes(self) -> Result<Vec<u8>, GraphTileBuildError> {
-        const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
-        let mut body: Vec<u8> = Vec::new();
-
-        body.extend(self.nodes.iter().flat_map(|value| value.as_bytes()));
-        body.extend(self.transitions.iter().flat_map(|value| value.as_bytes()));
-        body.extend(
-            self.directed_edges
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.ext_directed_edges
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.access_restrictions
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.transit_departures
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(self.transit_stops.iter().flat_map(|value| value.as_bytes()));
-        body.extend(
-            self.transit_routes
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.transit_schedules
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.transit_transfers
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(self.signs.iter().flat_map(|value| value.as_bytes()));
-        body.extend(self.turn_lanes.iter().flat_map(|value| value.as_bytes()));
-        body.extend(self.admins.iter().flat_map(|value| value.as_bytes()));
-        body.extend(self.edge_bins.iter().flat_map(|value| value.as_bytes()));
-        body.extend(
-            self.complex_forward_restrictions_memory
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.complex_reverse_restrictions_memory
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            self.edge_info_memory
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(self.text_memory.iter().flat_map(|value| value.as_bytes()));
-        body.extend(
-            self.lane_connectivity_memory
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-
+    pub fn into_byte_iter(self) -> Result<impl Iterator<Item = u8>, GraphTileBuildError> {
+        // Validate and finalize predicted speeds arrays (sizes and counts)
         let intermediate = self.grow_predicted_speeds_if_needed(false);
         if intermediate.predicted_speed_profile_memory.is_empty() {
             assert!(
@@ -412,19 +355,7 @@ impl GraphTileBuilder<'_> {
             )
         }
 
-        body.extend(
-            intermediate
-                .predicted_speed_offsets
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-        body.extend(
-            intermediate
-                .predicted_speed_profile_memory
-                .iter()
-                .flat_map(|value| value.as_bytes()),
-        );
-
+        // Build the header from the finalized state, then own the header bytes.
         let header = GraphTileHeaderBuilder {
             version: intermediate.writer_version,
             graph_id: intermediate.graph_id,
@@ -462,13 +393,292 @@ impl GraphTileBuilder<'_> {
             text_list_size: intermediate.text_memory.len(),
             lane_connectivity_size: intermediate.lane_connectivity_memory.len(),
         };
+        // Meh extra alloc...
+        let header_bytes = header.build()?.as_bytes().to_vec();
 
-        let mut result = Vec::with_capacity(HEADER_SIZE + body.len());
-        result.extend(header.build()?.as_bytes());
+        Ok(TileByteIter {
+            header: header_bytes,
+            stage: TileBuildStage::Header,
+            buf: Vec::new(),
+            buf_pos: 0,
+            nodes: intermediate.nodes,
+            transitions: intermediate.transitions,
+            directed_edges: intermediate.directed_edges,
+            ext_directed_edges: intermediate.ext_directed_edges,
+            access_restrictions: intermediate.access_restrictions,
+            transit_departures: intermediate.transit_departures,
+            transit_stops: intermediate.transit_stops,
+            transit_routes: intermediate.transit_routes,
+            transit_schedules: intermediate.transit_schedules,
+            transit_transfers: intermediate.transit_transfers,
+            signs: intermediate.signs,
+            turn_lanes: intermediate.turn_lanes,
+            admins: intermediate.admins,
+            edge_bins: intermediate.edge_bins,
+            complex_forward_restrictions_memory: intermediate.complex_forward_restrictions_memory,
+            complex_reverse_restrictions_memory: intermediate.complex_reverse_restrictions_memory,
+            edge_info_memory: intermediate.edge_info_memory,
+            text_memory: intermediate.text_memory,
+            lane_connectivity_memory: intermediate.lane_connectivity_memory,
+            predicted_speed_offsets: intermediate.predicted_speed_offsets,
+            predicted_speed_profile_memory: intermediate.predicted_speed_profile_memory,
+        })
+    }
 
-        result.extend(body);
+    /// Serializes the tile as owned bytes.
+    ///
+    /// NOTE: This allocates somewhere on the order of 2x the final tile size
+    /// while building the tile.
+    /// Use other build methods if you need to conserve RAM.
+    ///
+    /// # Errors
+    ///
+    /// Refer to the documentation for [`GraphTileBuilder::into_byte_iter`] for error conditions.
+    pub fn into_bytes(self) -> Result<Vec<u8>, GraphTileBuildError> {
+        Ok(self.into_byte_iter()?.collect())
+    }
+}
 
-        Ok(result)
+/// An iterator that lazily produces a full graph tile without too many extra allocations.
+///
+/// Specifically, while this iterator is not zero-cost,
+/// it will only allocate one section (e.g., nodes, directed edges, etc.)
+/// at a time.
+///
+/// This dramatically reduces the peak memory usage when serializing a tile directly
+/// to an output stream (file, network, etc.).
+struct TileByteIter<'a> {
+    header: Vec<u8>,
+
+    /// The current stage of production.
+    stage: TileBuildStage,
+
+    /// Working buffer for the current section.
+    buf: Vec<u8>,
+    buf_pos: usize,
+
+    // Body sections (matching into_bytes order)
+    nodes: Cow<'a, [NodeInfo]>,
+    transitions: Cow<'a, [NodeTransition]>,
+    directed_edges: Cow<'a, [DirectedEdge]>,
+    ext_directed_edges: Cow<'a, [DirectedEdgeExt]>,
+    access_restrictions: Cow<'a, [AccessRestriction]>,
+    transit_departures: Cow<'a, [TransitDeparture]>,
+    transit_stops: Cow<'a, [TransitStop]>,
+    transit_routes: Cow<'a, [TransitRoute]>,
+    transit_schedules: Cow<'a, [TransitSchedule]>,
+    transit_transfers: Cow<'a, [TransitTransfer]>,
+    signs: Cow<'a, [Sign]>,
+    turn_lanes: Cow<'a, [TurnLane]>,
+    admins: Cow<'a, [Admin]>,
+    edge_bins: Cow<'a, [GraphId]>,
+    complex_forward_restrictions_memory: Cow<'a, [u8]>,
+    complex_reverse_restrictions_memory: Cow<'a, [u8]>,
+    edge_info_memory: Cow<'a, [u8]>,
+    text_memory: Cow<'a, [u8]>,
+    lane_connectivity_memory: Cow<'a, [u8]>,
+    predicted_speed_offsets: Cow<'a, [U32<LE>]>,
+    predicted_speed_profile_memory: Cow<'a, [I16<LE>]>,
+}
+
+/// The stage of the tile production.
+///
+/// Stages are rendered in the order specified below
+/// (variant order matters!!).
+#[derive(Copy, Clone, Debug, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+enum TileBuildStage {
+    Header,
+    Nodes,
+    Transitions,
+    DirectedEdges,
+    ExtDirectedEdges,
+    AccessRestrictions,
+    TransitDepartures,
+    TransitStops,
+    TransitRoutes,
+    TransitSchedules,
+    TransitTransfers,
+    Signs,
+    TurnLanes,
+    Admins,
+    EdgeBins,
+    ComplexForwardRestrictions,
+    ComplexReverseRestrictions,
+    EdgeInfo,
+    TextMemory,
+    LaneConnectivity,
+    PredictedSpeedOffsets,
+    PredictedSpeedProfiles,
+    Done,
+}
+
+impl TileBuildStage {
+    fn next(self) -> TileBuildStage {
+        let current: u8 = self.into();
+
+        TileBuildStage::try_from(current + 1).unwrap_or(TileBuildStage::Done)
+    }
+}
+
+impl<'a> TileByteIter<'a> {
+    fn fill_from_cow<T: IntoBytes + Immutable>(&mut self, items: Cow<'a, [T]>)
+    where
+        [T]: ToOwned,
+    {
+        let items = items.as_ref();
+        self.buf.clear();
+        // Reserve an estimated capacity to minimize reallocations
+        self.buf.reserve(items.len() * size_of::<T>());
+        for v in items.iter() {
+            self.buf.extend(v.as_bytes());
+        }
+        // Reset the buffer pointer
+        self.buf_pos = 0;
+    }
+
+    fn fill_buffer_and_advance(&mut self) {
+        match self.stage {
+            TileBuildStage::Header => {
+                // Move header bytes into the working buffer without copying
+                self.buf = std::mem::take(&mut self.header);
+                self.buf_pos = 0;
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::Nodes => {
+                let items = std::mem::take(&mut self.nodes);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::Transitions => {
+                let items = std::mem::take(&mut self.transitions);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::DirectedEdges => {
+                let items = std::mem::take(&mut self.directed_edges);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::ExtDirectedEdges => {
+                let items = std::mem::take(&mut self.ext_directed_edges);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::AccessRestrictions => {
+                let items = std::mem::take(&mut self.access_restrictions);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TransitDepartures => {
+                let items = std::mem::take(&mut self.transit_departures);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TransitStops => {
+                let items = std::mem::take(&mut self.transit_stops);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TransitRoutes => {
+                let items = std::mem::take(&mut self.transit_routes);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TransitSchedules => {
+                let items = std::mem::take(&mut self.transit_schedules);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TransitTransfers => {
+                let items = std::mem::take(&mut self.transit_transfers);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::Signs => {
+                let items = std::mem::take(&mut self.signs);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TurnLanes => {
+                let items = std::mem::take(&mut self.turn_lanes);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::Admins => {
+                let items = std::mem::take(&mut self.admins);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::EdgeBins => {
+                let items = std::mem::take(&mut self.edge_bins);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::ComplexForwardRestrictions => {
+                let bytes = std::mem::take(&mut self.complex_forward_restrictions_memory);
+                self.fill_from_cow(bytes);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::ComplexReverseRestrictions => {
+                let bytes = std::mem::take(&mut self.complex_reverse_restrictions_memory);
+                self.fill_from_cow(bytes);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::EdgeInfo => {
+                let bytes = std::mem::take(&mut self.edge_info_memory);
+                self.fill_from_cow(bytes);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::TextMemory => {
+                let bytes = std::mem::take(&mut self.text_memory);
+                self.fill_from_cow(bytes);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::LaneConnectivity => {
+                let bytes = std::mem::take(&mut self.lane_connectivity_memory);
+                self.fill_from_cow(bytes);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::PredictedSpeedOffsets => {
+                let items = std::mem::take(&mut self.predicted_speed_offsets);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::PredictedSpeedProfiles => {
+                let items = std::mem::take(&mut self.predicted_speed_profile_memory);
+                self.fill_from_cow(items);
+                self.stage = self.stage.next();
+            }
+            TileBuildStage::Done => {
+                // No more sections
+                self.buf.clear();
+                self.buf_pos = 0;
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for TileByteIter<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        loop {
+            if self.buf_pos < self.buf.len() {
+                let b = self.buf[self.buf_pos];
+                self.buf_pos += 1;
+                return Some(b);
+            }
+
+            // No buffered bytes left; advance to next section or finish
+            if matches!(self.stage, TileBuildStage::Done) {
+                return None;
+            }
+
+            // Advance to the next stage of generation,
+            // refilling the buffer.
+            self.fill_buffer_and_advance();
+        }
     }
 }
 

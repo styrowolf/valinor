@@ -1,25 +1,79 @@
 use crate::GraphId;
+use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::GraphTileHandle;
+#[cfg(feature = "tokio")]
+use crate::graph_tile::{GraphTileBuildError, GraphTileBuilder};
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
 use lru::LruCache;
-use std::cell::RefCell;
 use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+#[cfg(feature = "tokio")]
+use tokio::{
+    fs::File,
+    io::{AsyncWriteExt, BufWriter},
+};
 
 pub struct DirectoryTileProvider {
     base_directory: PathBuf,
     // TODO: This is SUPER hackish for now...
-    lru_cache: RefCell<LruCache<GraphId, Rc<GraphTileHandle>>>,
+    lru_cache: Mutex<LruCache<GraphId, Arc<GraphTileHandle>>>,
 }
 
 impl DirectoryTileProvider {
     pub fn new(base_directory: PathBuf, num_cached_tiles: NonZeroUsize) -> Self {
         DirectoryTileProvider {
             base_directory,
-            lru_cache: RefCell::new(LruCache::new(num_cached_tiles)),
+            lru_cache: Mutex::new(LruCache::new(num_cached_tiles)),
         }
+    }
+
+    /// Replaces the tile stored at the designated location
+    /// with the tile produced by this builder.
+    #[cfg(feature = "tokio")]
+    pub async fn overwrite_tile(
+        &self,
+        graph_tile_builder: GraphTileBuilder<'_>,
+    ) -> Result<(), GraphTileBuildError> {
+        let graph_id = graph_tile_builder.graph_id();
+        let path = self.path_for_graph_id(graph_id)?;
+        let file = File::create(path).await?;
+        let mut writer = BufWriter::new(file);
+
+        // TODO: figure out an appropriate size
+        const BUF_SIZE: usize = 8192;
+        let mut buf = Vec::with_capacity(BUF_SIZE);
+
+        for byte in graph_tile_builder.into_byte_iter()? {
+            buf.push(byte);
+            if buf.len() == BUF_SIZE {
+                writer.write_all(&buf).await?;
+                buf.clear();
+            }
+        }
+
+        if !buf.is_empty() {
+            writer.write_all(&buf).await?;
+        }
+
+        writer.flush().await?;
+
+        // Invalidate the cache
+        let mut cache = self
+            .lru_cache
+            .lock()
+            .map_err(|e| GraphTileBuildError::PoisonedCacheLock(e.to_string()))?;
+        cache.pop(&graph_id);
+
+        Ok(())
+    }
+
+    /// Computes the path for the given graph ID.
+    ///
+    /// NOTE: This function assumes that the graph ID is already a base ID.
+    fn path_for_graph_id(&self, graph_id: GraphId) -> Result<PathBuf, InvalidGraphIdError> {
+        Ok(self.base_directory.join(graph_id.file_path("gph")?))
     }
 }
 
@@ -27,14 +81,17 @@ impl GraphTileProvider for DirectoryTileProvider {
     fn get_tile_containing(
         &self,
         graph_id: GraphId,
-    ) -> Result<Rc<GraphTileHandle>, GraphTileProviderError> {
+    ) -> Result<Arc<GraphTileHandle>, GraphTileProviderError> {
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
-        let mut cache = self.lru_cache.borrow_mut();
+        let mut cache = self
+            .lru_cache
+            .lock()
+            .map_err(|e| GraphTileProviderError::PoisonedCacheLock(e.to_string()))?;
         let tile = cache
             .try_get_or_insert(base_graph_id, || {
-                let path = self.base_directory.join(base_graph_id.file_path("gph")?);
+                let path = self.path_for_graph_id(base_graph_id)?;
                 // Open the file and read all bytes into a buffer
                 // NOTE: Does not handle compressed tiles
                 let data = std::fs::read(path).map_err(|e| match e.kind() {
@@ -42,7 +99,7 @@ impl GraphTileProvider for DirectoryTileProvider {
                     _ => GraphTileProviderError::IoError(e),
                 })?;
                 let tile = GraphTileHandle::try_from(data)?;
-                Ok::<_, GraphTileProviderError>(Rc::new(tile))
+                Ok::<_, GraphTileProviderError>(Arc::new(tile))
             })
             .cloned()?;
 

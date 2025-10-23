@@ -11,7 +11,7 @@ use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -241,7 +241,7 @@ fn main() -> anyhow::Result<()> {
 
 fn export_edges_for_tile<W: Write>(
     mut writer: W,
-    tile: Rc<GraphTileHandle>,
+    tile: Arc<GraphTileHandle>,
     tile_id: GraphId,
     edge_index_offset: usize,
     reader: &DirectoryTileProvider,

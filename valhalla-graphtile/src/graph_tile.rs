@@ -52,8 +52,13 @@ pub enum GraphTileDecodingError {
     ByteSequenceValidityError,
     #[error("Invalid graph ID.")]
     GraphIdParseError(#[from] InvalidGraphIdError),
-    #[error("Data cast failed (this almost always means invalid data): {0}")]
-    CastError(String),
+    #[error(
+        "Data cast failed for field {field} (this almost always means invalid data): {error_description}"
+    )]
+    CastError {
+        field: String,
+        error_description: String,
+    },
     #[error(
         "Expected to have consumed all bytes in the graph tile, but we still have a leftover buffer of {0} bytes. This is either a tile reader implementation error, or the tile is invalid."
     )]
@@ -64,6 +69,8 @@ pub enum GraphTileDecodingError {
 
 #[derive(Debug, Error)]
 pub enum GraphTileBuildError {
+    #[error("{0}")]
+    InvalidGraphId(#[from] InvalidGraphIdError),
     #[error("Invalid version string: {0} does not fit into 16 bytes in UTF-8.")]
     InvalidVersionString(String),
     #[error("Invalid index: {0}.")]
@@ -78,6 +85,10 @@ pub enum GraphTileBuildError {
         "Unable to cast an integer to another type (usually means data is too large for the type): {0:?}."
     )]
     TryFromInt(#[from] std::num::TryFromIntError),
+    #[error("Error writing tile: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Poisoned cache lock when writing tile: {0}")]
+    PoisonedCacheLock(String),
 }
 
 #[derive(Debug, Error)]
@@ -437,6 +448,10 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
         // Get the byte range of the header so we can transmute it
         const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
 
+        if bytes.len() < HEADER_SIZE {
+            return Err(GraphTileDecodingError::SliceLength);
+        }
+
         let header_range = 0..HEADER_SIZE;
 
         // Fixed-size header
@@ -473,18 +488,28 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
 
         // Basic features
         let (nodes, bytes) =
-            <[NodeInfo]>::ref_from_prefix_with_elems(bytes, header.node_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[NodeInfo]>::ref_from_prefix_with_elems(bytes, header.node_count() as usize).map_err(
+                |e| GraphTileDecodingError::CastError {
+                    field: "node_info".to_string(),
+                    error_description: e.to_string(),
+                },
+            )?;
         let (transitions, bytes) = <[NodeTransition]>::ref_from_prefix_with_elems(
             bytes,
             header.transition_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "transitions".to_string(),
+            error_description: e.to_string(),
+        })?;
         let (directed_edges, bytes) = <[DirectedEdge]>::ref_from_prefix_with_elems(
             bytes,
             header.directed_edge_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "directed_edges".to_string(),
+            error_description: e.to_string(),
+        })?;
 
         // Extended directed edges
         let directed_edge_ext_count = if header.has_ext_directed_edge() {
@@ -494,52 +519,88 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
         };
         let (ext_directed_edges, bytes) =
             <[DirectedEdgeExt]>::ref_from_prefix_with_elems(bytes, directed_edge_ext_count)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                    field: "directed_edge_ext".to_string(),
+                    error_description: e.to_string(),
+                })?;
 
         // Access restrictions
         let (access_restrictions, bytes) = <[AccessRestriction]>::ref_from_prefix_with_elems(
             bytes,
             header.access_restriction_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "access_restrictions".to_string(),
+            error_description: e.to_string(),
+        })?;
 
         // Transit features
         let (transit_departures, bytes) = <[TransitDeparture]>::ref_from_prefix_with_elems(
             bytes,
             header.departure_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "transit_departures".to_string(),
+            error_description: e.to_string(),
+        })?;
         let (transit_stops, bytes) =
             <[TransitStop]>::ref_from_prefix_with_elems(bytes, header.stop_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                    field: "transit_stops".to_string(),
+                    error_description: e.to_string(),
+                })?;
         let (transit_routes, bytes) =
             <[TransitRoute]>::ref_from_prefix_with_elems(bytes, header.route_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                    field: "transit_routes".to_string(),
+                    error_description: e.to_string(),
+                })?;
         let (transit_schedules, bytes) = <[TransitSchedule]>::ref_from_prefix_with_elems(
             bytes,
             header.schedule_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "transit_schedules".to_string(),
+            error_description: e.to_string(),
+        })?;
         let (transit_transfers, bytes) = <[TransitTransfer]>::ref_from_prefix_with_elems(
             bytes,
             header.transfer_count() as usize,
         )
-        .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+        .map_err(|e| GraphTileDecodingError::CastError {
+            field: "transit_transfers".to_string(),
+            error_description: e.to_string(),
+        })?;
 
         let (signs, bytes) =
-            <[Sign]>::ref_from_prefix_with_elems(bytes, header.sign_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[Sign]>::ref_from_prefix_with_elems(bytes, header.sign_count() as usize).map_err(
+                |e| GraphTileDecodingError::CastError {
+                    field: "signs".to_string(),
+                    error_description: e.to_string(),
+                },
+            )?;
         let (turn_lanes, bytes) =
             <[TurnLane]>::ref_from_prefix_with_elems(bytes, header.turn_lane_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                    field: "turn_lanes".to_string(),
+                    error_description: e.to_string(),
+                })?;
 
         let (admins, bytes) =
-            <[Admin]>::ref_from_prefix_with_elems(bytes, header.admin_count() as usize)
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[Admin]>::ref_from_prefix_with_elems(bytes, header.admin_count() as usize).map_err(
+                |e| GraphTileDecodingError::CastError {
+                    field: "admins".to_string(),
+                    error_description: e.to_string(),
+                },
+            )?;
 
         let (edge_bins, bytes) =
-            <[U64<LE>]>::ref_from_prefix_with_elems(bytes, header.edge_bins_count())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[U64<LE>]>::ref_from_prefix_with_elems(bytes, header.edge_bins_count()).map_err(
+                |e| GraphTileDecodingError::CastError {
+                    field: "edge_bins".to_string(),
+                    error_description: e.to_string(),
+                },
+            )?;
         let edge_bins = edge_bins
             .into_iter()
             .map(|it| GraphId::try_from_id(it.get()))
@@ -547,23 +608,41 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
 
         let (complex_forward_restrictions_memory, bytes) =
             <[u8]>::ref_from_prefix_with_elems(bytes, header.complex_forward_restrictions_size())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                field: "complex_forward_restrictions".to_string(),
+                error_description: e.to_string(),
+            })?;
 
         let (complex_reverse_restrictions_memory, bytes) =
             <[u8]>::ref_from_prefix_with_elems(bytes, header.complex_reverse_restrictions_size())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+                .map_err(|e| GraphTileDecodingError::CastError {
+                field: "complex_reverse_restrictions".to_string(),
+                error_description: e.to_string(),
+            })?;
 
         let (edge_info_memory, bytes) =
-            <[u8]>::ref_from_prefix_with_elems(bytes, header.edge_info_size())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[u8]>::ref_from_prefix_with_elems(bytes, header.edge_info_size()).map_err(|e| {
+                GraphTileDecodingError::CastError {
+                    field: "edge_info_memory".to_string(),
+                    error_description: e.to_string(),
+                }
+            })?;
 
         let (text_memory, bytes) =
-            <[u8]>::ref_from_prefix_with_elems(bytes, header.text_list_size())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[u8]>::ref_from_prefix_with_elems(bytes, header.text_list_size()).map_err(|e| {
+                GraphTileDecodingError::CastError {
+                    field: "text_memory".to_string(),
+                    error_description: e.to_string(),
+                }
+            })?;
 
         let (lane_connectivity_memory, bytes) =
-            <[u8]>::ref_from_prefix_with_elems(bytes, header.lane_connectivity_size())
-                .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            <[u8]>::ref_from_prefix_with_elems(bytes, header.lane_connectivity_size()).map_err(
+                |e| GraphTileDecodingError::CastError {
+                    field: "lane_connectivity".to_string(),
+                    error_description: e.to_string(),
+                },
+            )?;
 
         let (predicted_speeds, bytes) = if header.predicted_speeds_count() > 0 {
             // Curiously, these seem to actually be unaligned in a Valhalla tile I generated!
@@ -571,13 +650,19 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
                 bytes,
                 header.directed_edge_count() as usize,
             )
-            .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            .map_err(|e| GraphTileDecodingError::CastError {
+                field: "predicted_speed_offsets".to_string(),
+                error_description: e.to_string(),
+            })?;
 
             let (profiles, bytes) = <[I16<LE>]>::ref_from_prefix_with_elems(
                 profile_data,
                 header.predicted_speeds_count() as usize * COEFFICIENT_COUNT,
             )
-            .map_err(|e| GraphTileDecodingError::CastError(e.to_string()))?;
+            .map_err(|e| GraphTileDecodingError::CastError {
+                field: "predicted_speed_profiles".to_string(),
+                error_description: e.to_string(),
+            })?;
 
             (Some(PredictedSpeeds::new(offsets, profiles)), bytes)
         } else {

@@ -1,5 +1,5 @@
 use crate::GraphId;
-use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 
 // TODO: mmapped tarball version
@@ -25,6 +25,8 @@ pub enum GraphTileProviderError {
     GraphTileError(#[from] GraphTileDecodingError),
     #[error("Graph tile lookup error: {0}")]
     GraphTileLookupError(#[from] LookupError),
+    #[error("Cache lock is poisoned: {0}")]
+    PoisonedCacheLock(String),
 }
 
 pub trait GraphTileProvider {
@@ -44,7 +46,7 @@ pub trait GraphTileProvider {
     fn get_tile_containing(
         &self,
         graph_id: GraphId,
-    ) -> Result<Rc<GraphTileHandle>, GraphTileProviderError>;
+    ) -> Result<Arc<GraphTileHandle>, GraphTileProviderError>;
 
     /// Gets the opposing edge and the tile containing it.
     ///
@@ -65,7 +67,7 @@ pub trait GraphTileProvider {
     fn get_opposing_edge(
         &self,
         graph_id: GraphId,
-    ) -> Result<(GraphId, Rc<GraphTileHandle>), GraphTileProviderError> {
+    ) -> Result<(GraphId, Arc<GraphTileHandle>), GraphTileProviderError> {
         let tile = self.get_tile_containing(graph_id)?;
         let edge = tile.get_directed_edge(graph_id)?;
 
