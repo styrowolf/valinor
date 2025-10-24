@@ -1,6 +1,5 @@
 use geo::LineString;
 use serde::Serialize;
-use std::rc::Rc;
 use std::sync::Arc;
 use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, GraphTile, GraphTileHandle};
 use valhalla_graphtile::tile_hierarchy::TileLevel;

@@ -1,15 +1,14 @@
 use crate::GraphId;
 use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::GraphTileHandle;
-#[cfg(feature = "tokio")]
 use crate::graph_tile::{GraphTileBuildError, GraphTileBuilder};
-use crate::tile_provider::{GraphTileProvider, GraphTileProviderError};
+use crate::tile_provider::{GraphTileProvider, GraphTileProviderError, LockTable};
 use lru::LruCache;
 use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-#[cfg(feature = "tokio")]
+use async_trait::async_trait;
 use tokio::{
     fs::File,
     io::{AsyncWriteExt, BufWriter},
@@ -17,7 +16,8 @@ use tokio::{
 
 pub struct DirectoryTileProvider {
     base_directory: PathBuf,
-    // TODO: This is SUPER hackish for now...
+    lock_table: LockTable<GraphId>,
+    // TODO: This is a bit hackish for now, but even so it speeds things up MASSIVELY for many workloads!
     lru_cache: Mutex<LruCache<GraphId, Arc<GraphTileHandle>>>,
 }
 
@@ -25,45 +25,78 @@ impl DirectoryTileProvider {
     pub fn new(base_directory: PathBuf, num_cached_tiles: NonZeroUsize) -> Self {
         DirectoryTileProvider {
             base_directory,
+            lock_table: LockTable::new(),
             lru_cache: Mutex::new(LruCache::new(num_cached_tiles)),
         }
     }
 
     /// Replaces the tile stored at the designated location
     /// with the tile produced by this builder.
-    #[cfg(feature = "tokio")]
+    ///
+    /// # Data race safety
+    ///
+    /// The implementation takes the following steps to ensure data race safety:
+    ///
+    /// - Acquires a lock at the start of the call, ensuring that calls to [`DirectoryTileProvider::get_tile_containing`]
+    ///   block until this method exits.
+    /// - Writes to a temporary file initially, so if anything goes wrong, the original file is not affected.
+    ///   After successfully writing the temp file, it is atomically renamed on top of the original.
+    /// - Clears the internal tile cache (local to _this_ [`DirectoryTileProvider`] instance!)
+    ///   once the rename succeeds.
+    /// - Releases the lock, unblocking access to this tile, only after everything succeeds,
+    ///   or fails mid-write (in which case, only the temporary file is affected).
+    ///
+    /// In this way, a (single!) [`DirectoryTileProvider`] should be safe to use in async contexts,
+    /// without fear of races from writers.
+    /// Additionally, since readers always have to wait for a writer to finish,
+    /// readers will never get a partially written tile, nor will they get a stale tile
+    /// if there is an open write operation.
+    ///
+    /// ## Edge cases
+    ///
+    /// Once you have a handle to a graph tile from [`DirectoryTileProvider::get_tile_containing`],
+    /// the lock is freed and a writer may then proceed.
+    /// Your handle will _not_ change or block writers,
+    /// creating an opportunity for edge cases (especially if you plan to create a builder from this tile
+    /// to write changes!).
+    ///
+    /// So, if your workload involves both reads and writes,
+    /// **you _must_ ensure that your tile references cannot be stale.**
+    /// This probably means some sort of partition mutex in your processing loop.
+    ///
+    /// Additionally, if the write operation fails, your graph tile builder is gone.
+    /// The original file on disk is not in a dirty state, but to retry again,
+    /// the caller would need to reconstruct the same builder from scratch.
     pub async fn overwrite_tile(
         &self,
         graph_tile_builder: GraphTileBuilder<'_>,
     ) -> Result<(), GraphTileBuildError> {
         let graph_id = graph_tile_builder.graph_id();
+
+        let lock = self.lock_table.lock_for(graph_id);
+        let _guard = lock.lock().await;
+
         let path = self.path_for_graph_id(graph_id)?;
-        let file = File::create(path).await?;
+
+        // Write to a temp file
+        let tmp_path = path.with_extension(".tmp");
+        let file = File::create(&tmp_path).await?;
         let mut writer = BufWriter::new(file);
 
-        // TODO: figure out an appropriate size
-        const BUF_SIZE: usize = 8192;
-        let mut buf = Vec::with_capacity(BUF_SIZE);
-
-        for byte in graph_tile_builder.into_byte_iter()? {
-            buf.push(byte);
-            if buf.len() == BUF_SIZE {
-                writer.write_all(&buf).await?;
-                buf.clear();
-            }
-        }
-
-        if !buf.is_empty() {
-            writer.write_all(&buf).await?;
+        for section in graph_tile_builder.into_byte_iter()? {
+            writer.write_all(&section).await?;
         }
 
         writer.flush().await?;
 
-        // Invalidate the cache
+        // Replace the original file atomically
+        tokio::fs::rename(tmp_path, path).await?;
+
         let mut cache = self
             .lru_cache
             .lock()
             .map_err(|e| GraphTileBuildError::PoisonedCacheLock(e.to_string()))?;
+        // Invalidate the cache
         cache.pop(&graph_id);
 
         Ok(())
@@ -77,11 +110,15 @@ impl DirectoryTileProvider {
     }
 }
 
+#[async_trait]
 impl GraphTileProvider for DirectoryTileProvider {
-    fn get_tile_containing(
+    async fn get_tile_containing(
         &self,
         graph_id: GraphId,
     ) -> Result<Arc<GraphTileHandle>, GraphTileProviderError> {
+        let lock = self.lock_table.lock_for(graph_id);
+        let _guard = lock.lock().await;
+
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
         let base_graph_id = graph_id.tile_base_id();
@@ -121,8 +158,8 @@ mod test {
     use std::num::NonZeroUsize;
     use std::path::PathBuf;
 
-    #[test]
-    fn test_get_tile() {
+    #[tokio::test]
+    async fn test_get_tile() {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-tiles");
@@ -130,6 +167,7 @@ mod test {
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
         let tile = provider
             .get_tile_containing(graph_id)
+            .await
             .expect("Unable to get tile");
 
         // Minimally test that we got the correct tile
@@ -137,8 +175,8 @@ mod test {
         assert_eq!(tile.header().graph_id().value(), graph_id.value());
     }
 
-    #[test]
-    fn test_get_opp_edge() {
+    #[tokio::test]
+    async fn test_get_opp_edge() {
         let mut rng = rng();
 
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -148,6 +186,7 @@ mod test {
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
         let tile = provider
             .get_tile_containing(graph_id)
+            .await
             .expect("Unable to get tile");
 
         // Cross-check the default implementation of the opposing edge ID function.
@@ -161,6 +200,7 @@ mod test {
                 .expect("Unable to get opp edge index.");
             let (opp_edge_id, _) = provider
                 .get_opposing_edge(edge_id)
+                .await
                 .expect("Unable to get opposing edge.");
             assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
         }

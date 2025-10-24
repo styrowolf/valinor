@@ -8,11 +8,12 @@ authors = ["Ian Wagner <ian@stadiamaps.com>"]
 [features]
 serde = ["dep:serde"]
 serialize_predicted_speed = ["serde"]
-tokio = ["dep:tokio"]
 
 [dependencies]
+async-trait = "0.1.89"
 base64 = { workspace = true }
-chrono = "0.4.42"
+chrono = { workspace = true }
+dashmap = { workspace = true }
 self_cell = "1.2.0"
 thiserror = { workspace = true }
 geo = { workspace = true }
@@ -25,7 +26,7 @@ lru = { workspace = true }
 num_enum = { workspace = true }
 trig-const = "0.3.0"
 serde = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true }
 zerocopy = { workspace = true }
 zerocopy-derive = { workspace = true }
 

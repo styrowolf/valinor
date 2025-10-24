@@ -1,6 +1,9 @@
 use crate::GraphId;
 use std::sync::Arc;
+use async_trait::async_trait;
 use thiserror::Error;
+use dashmap::DashMap;
+use tokio::sync::Mutex;
 
 // TODO: mmapped tarball version
 mod directory_tile_provider;
@@ -29,6 +32,7 @@ pub enum GraphTileProviderError {
     PoisonedCacheLock(String),
 }
 
+#[async_trait]
 pub trait GraphTileProvider {
     // TODO: Should this be async? Seems like it to allow network retrieval.
     /// Gets a tile with the given graph ID.
@@ -43,7 +47,7 @@ pub trait GraphTileProvider {
     ///
     /// Implementations should ensure that they look up the base ID for IDs that are passed in
     /// with [`GraphId::tile_base_id`].
-    fn get_tile_containing(
+    async fn get_tile_containing(
         &self,
         graph_id: GraphId,
     ) -> Result<Arc<GraphTileHandle>, GraphTileProviderError>;
@@ -64,11 +68,11 @@ pub trait GraphTileProvider {
     /// This method always has to do a tile lookup (potentially cached, but a lookup nonetheless).
     /// This is MUCH slower than looking at the tile first, so you should always call
     /// [`GraphTile::get_opp_edge_index`] first
-    fn get_opposing_edge(
+    async fn get_opposing_edge(
         &self,
         graph_id: GraphId,
     ) -> Result<(GraphId, Arc<GraphTileHandle>), GraphTileProviderError> {
-        let tile = self.get_tile_containing(graph_id)?;
+        let tile = self.get_tile_containing(graph_id).await?;
         let edge = tile.get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
@@ -80,7 +84,7 @@ pub trait GraphTileProvider {
         {
             Ok(index) => (tile, index),
             Err(LookupError::MismatchedBase) => {
-                let tile = self.get_tile_containing(end_node_id)?;
+                let tile = self.get_tile_containing(end_node_id).await?;
                 let index = tile.get_node(end_node_id)?.edge_index();
                 (tile, index)
             }
@@ -100,3 +104,19 @@ pub trait GraphTileProvider {
         Ok((id, opp_tile))
     }
 }
+
+/// A keyed lock.
+///
+/// This enables more granular locking than over an entire data structure.
+pub(crate) struct LockTable<K>(DashMap<K, Arc<Mutex<()>>>);
+
+impl<K: std::hash::Hash + Eq + Clone> LockTable<K> {
+    pub fn new() -> Self { Self(DashMap::new()) }
+
+    pub fn lock_for(&self, k: K) -> Arc<Mutex<()>> {
+        self.0.entry(k.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+}
+

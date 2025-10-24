@@ -10,7 +10,6 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
@@ -131,7 +130,12 @@ fn main() -> anyhow::Result<()> {
             progress_bar.as_ref().inspect(|bar| bar.inc(1));
             // Get the index pointer for each tile in the level
             let graph_id = GraphId::try_from_components(level.level, u64::from(tile_id), 0)?;
-            match reader.get_tile_containing(graph_id) {
+            // We use a thread local executor for simplicity here rather than full tokio.
+            // This is essentially a synchronous program
+            // built on rayon for CPU parallelism.
+            // There should not be much waiting for file I/O,
+            // and all the blocking is naturally fine as these are on a thread pool.
+            match futures::executor::block_on(reader.get_tile_containing(graph_id)) {
                 Ok(tile) => {
                     let tile_edge_count = tile.header().directed_edge_count() as usize;
                     tile_set.insert(graph_id, edge_count);
@@ -181,7 +185,7 @@ fn main() -> anyhow::Result<()> {
             let reader =
                 DirectoryTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-            let tile = reader.get_tile_containing(*tile_id)?;
+            let tile = futures::executor::block_on(reader.get_tile_containing(*tile_id))?;
 
             // Create a base writer to either stdout or a file with appropriate extension
             let base: Box<dyn Write> = if write_to_stdout {
@@ -288,7 +292,7 @@ fn export_edges_for_tile<W: Write>(
                 return Err(LookupError::InvalidIndex)?;
             }
             Err(LookupError::MismatchedBase) => {
-                let (opp_graph_id, tile) = reader.get_opposing_edge(edge_id)?;
+                let (opp_graph_id, tile) = futures::executor::block_on(reader.get_opposing_edge(edge_id))?;
                 EdgePointer {
                     graph_id: opp_graph_id,
                     tile,

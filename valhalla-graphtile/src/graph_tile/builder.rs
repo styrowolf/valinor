@@ -317,9 +317,10 @@ impl GraphTileBuilder<'_> {
 
     /// Yields the raw bytes of a full tile in the order they should be stored on disk.
     ///
-    /// This API is not perfectly lazy down to the byte level,
-    /// but minimizes allocations by using a shared buffer no larger than the largest section
-    /// (e.g. nodes, directed edges, names, etc.) of the file.
+    /// This API is produces each section of the file
+    /// (e.g. nodes, directed edges, names, etc.) lazily as requested.
+    /// Thus, the most memory it will need at one time is bounded
+    /// by the size of the largest section.
     ///
     /// # Errors
     ///
@@ -332,7 +333,7 @@ impl GraphTileBuilder<'_> {
     /// * Setting a creation date more than 11,758,979.59 years after January 1, 2014
     ///
     /// TL;DR, things that you really shouldn't do, or are a clear programming error.
-    pub fn into_byte_iter(self) -> Result<impl Iterator<Item = u8>, GraphTileBuildError> {
+    pub fn into_byte_iter(self) -> Result<impl Iterator<Item = Box<[u8]>>, GraphTileBuildError> {
         // Validate and finalize predicted speeds arrays (sizes and counts)
         let intermediate = self.grow_predicted_speeds_if_needed(false);
         if intermediate.predicted_speed_profile_memory.is_empty() {
@@ -399,8 +400,6 @@ impl GraphTileBuilder<'_> {
         Ok(TileByteIter {
             header: header_bytes,
             stage: TileBuildStage::Header,
-            buf: Vec::new(),
-            buf_pos: 0,
             nodes: intermediate.nodes,
             transitions: intermediate.transitions,
             directed_edges: intermediate.directed_edges,
@@ -435,7 +434,7 @@ impl GraphTileBuilder<'_> {
     ///
     /// Refer to the documentation for [`GraphTileBuilder::into_byte_iter`] for error conditions.
     pub fn into_bytes(self) -> Result<Vec<u8>, GraphTileBuildError> {
-        Ok(self.into_byte_iter()?.collect())
+        Ok(self.into_byte_iter()?.flatten().collect())
     }
 }
 
@@ -452,10 +451,6 @@ struct TileByteIter<'a> {
 
     /// The current stage of production.
     stage: TileBuildStage,
-
-    /// Working buffer for the current section.
-    buf: Vec<u8>,
-    buf_pos: usize,
 
     // Body sections (matching into_bytes order)
     nodes: Cow<'a, [NodeInfo]>,
@@ -521,165 +516,100 @@ impl TileBuildStage {
     }
 }
 
-impl<'a> TileByteIter<'a> {
-    fn fill_from_cow<T: IntoBytes + Immutable>(&mut self, items: Cow<'a, [T]>)
-    where
-        [T]: ToOwned,
-    {
-        let items = items.as_ref();
-        self.buf.clear();
-        // Reserve an estimated capacity to minimize reallocations
-        self.buf.reserve(items.len() * size_of::<T>());
-        for v in items.iter() {
-            self.buf.extend(v.as_bytes());
-        }
-        // Reset the buffer pointer
-        self.buf_pos = 0;
-    }
+impl<'a> Iterator for TileByteIter<'a> {
+    type Item = Box<[u8]>;
 
-    fn fill_buffer_and_advance(&mut self) {
-        match self.stage {
+    fn next(&mut self) -> Option<Self::Item> {
+        let bytes = match self.stage {
             TileBuildStage::Header => {
-                // Move header bytes into the working buffer without copying
-                self.buf = std::mem::take(&mut self.header);
-                self.buf_pos = 0;
-                self.stage = self.stage.next();
+                std::mem::take(&mut self.header).into_boxed_slice()
             }
             TileBuildStage::Nodes => {
-                let items = std::mem::take(&mut self.nodes);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.nodes))
             }
             TileBuildStage::Transitions => {
-                let items = std::mem::take(&mut self.transitions);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transitions))
             }
             TileBuildStage::DirectedEdges => {
-                let items = std::mem::take(&mut self.directed_edges);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.directed_edges))
             }
             TileBuildStage::ExtDirectedEdges => {
-                let items = std::mem::take(&mut self.ext_directed_edges);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.ext_directed_edges))
             }
             TileBuildStage::AccessRestrictions => {
-                let items = std::mem::take(&mut self.access_restrictions);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.access_restrictions))
             }
             TileBuildStage::TransitDepartures => {
-                let items = std::mem::take(&mut self.transit_departures);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transit_departures))
             }
             TileBuildStage::TransitStops => {
-                let items = std::mem::take(&mut self.transit_stops);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transit_stops))
             }
             TileBuildStage::TransitRoutes => {
-                let items = std::mem::take(&mut self.transit_routes);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transit_routes))
             }
             TileBuildStage::TransitSchedules => {
-                let items = std::mem::take(&mut self.transit_schedules);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transit_schedules))
             }
             TileBuildStage::TransitTransfers => {
-                let items = std::mem::take(&mut self.transit_transfers);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.transit_transfers))
             }
             TileBuildStage::Signs => {
-                let items = std::mem::take(&mut self.signs);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.signs))
             }
             TileBuildStage::TurnLanes => {
-                let items = std::mem::take(&mut self.turn_lanes);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.turn_lanes))
             }
             TileBuildStage::Admins => {
-                let items = std::mem::take(&mut self.admins);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.admins))
             }
             TileBuildStage::EdgeBins => {
-                let items = std::mem::take(&mut self.edge_bins);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.edge_bins))
             }
             TileBuildStage::ComplexForwardRestrictions => {
-                let bytes = std::mem::take(&mut self.complex_forward_restrictions_memory);
-                self.fill_from_cow(bytes);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.complex_forward_restrictions_memory))
             }
             TileBuildStage::ComplexReverseRestrictions => {
-                let bytes = std::mem::take(&mut self.complex_reverse_restrictions_memory);
-                self.fill_from_cow(bytes);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.complex_reverse_restrictions_memory))
             }
             TileBuildStage::EdgeInfo => {
-                let bytes = std::mem::take(&mut self.edge_info_memory);
-                self.fill_from_cow(bytes);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.edge_info_memory))
             }
             TileBuildStage::TextMemory => {
-                let bytes = std::mem::take(&mut self.text_memory);
-                self.fill_from_cow(bytes);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.text_memory))
             }
             TileBuildStage::LaneConnectivity => {
-                let bytes = std::mem::take(&mut self.lane_connectivity_memory);
-                self.fill_from_cow(bytes);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.lane_connectivity_memory))
             }
             TileBuildStage::PredictedSpeedOffsets => {
-                let items = std::mem::take(&mut self.predicted_speed_offsets);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.predicted_speed_offsets))
             }
             TileBuildStage::PredictedSpeedProfiles => {
-                let items = std::mem::take(&mut self.predicted_speed_profile_memory);
-                self.fill_from_cow(items);
-                self.stage = self.stage.next();
+                bytes_from_items(std::mem::take(&mut self.predicted_speed_profile_memory))
             }
             TileBuildStage::Done => {
                 // No more sections
-                self.buf.clear();
-                self.buf_pos = 0;
+                return None
             }
-        }
+        };
+
+        self.stage = self.stage.next();
+        Some(bytes)
     }
 }
 
-impl<'a> Iterator for TileByteIter<'a> {
-    type Item = u8;
-
-    fn next(&mut self) -> Option<u8> {
-        loop {
-            if self.buf_pos < self.buf.len() {
-                let b = self.buf[self.buf_pos];
-                self.buf_pos += 1;
-                return Some(b);
-            }
-
-            // No buffered bytes left; advance to next section or finish
-            if matches!(self.stage, TileBuildStage::Done) {
-                return None;
-            }
-
-            // Advance to the next stage of generation,
-            // refilling the buffer.
-            self.fill_buffer_and_advance();
-        }
+fn bytes_from_items<T: IntoBytes + Immutable>(items: Cow<'_, [T]>) -> Box<[u8]>
+where
+    [T]: ToOwned,
+{
+    let items = items.as_ref();
+    // Reserve an estimated capacity to minimize reallocations
+    let mut buf = Vec::with_capacity(items.len() * size_of::<T>());
+    for v in items.iter() {
+        buf.extend(v.as_bytes());
     }
+
+    buf.into_boxed_slice()
 }
 
 #[cfg(test)]
