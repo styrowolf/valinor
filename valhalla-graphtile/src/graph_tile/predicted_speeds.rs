@@ -51,7 +51,7 @@ static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
     assert!(BUCKETS_PER_WEEK < 2usize.pow(24));
 
     // DCT-III constants for speed decoding and normalization
-    #[allow(
+    #[expect(
         clippy::cast_precision_loss,
         reason = "BUCKETS_PER_WEEK is always <= 23 bits"
     )]
@@ -64,7 +64,7 @@ static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
     let mut rows: Vec<[f32; COEFFICIENT_COUNT]> = vec![[0.0; COEFFICIENT_COUNT]; BUCKETS_PER_WEEK];
 
     for bucket in 0..BUCKETS_PER_WEEK {
-        #[allow(
+        #[expect(
             clippy::cast_precision_loss,
             reason = "BUCKETS_PER_WEEK is always <= 23 bits"
         )]
@@ -79,7 +79,7 @@ static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
 
         // c >= 1 columns
         for c in 1..COEFFICIENT_COUNT {
-            #[allow(
+            #[expect(
                 clippy::cast_precision_loss,
                 reason = "COEFFICIENT_COUNT is always <= 23 bits"
             )]

@@ -162,7 +162,7 @@ impl GraphId {
 
     /// Gets the hierarchy level.
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     pub const fn level(&self) -> u8 {
         (self.value() & MAX_HIERARCHY_LEVEL as u64) as u8
     }

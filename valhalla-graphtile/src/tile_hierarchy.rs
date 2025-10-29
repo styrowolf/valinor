@@ -26,11 +26,11 @@ impl TilingSystem {
         Self {
             bounding_box,
             tile_size,
-            #[allow(clippy::cast_possible_truncation)]
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(clippy::cast_possible_truncation)]
+            #[expect(clippy::cast_sign_loss)]
             n_rows: (bounding_box.height() / tile_size).round() as u32,
-            #[allow(clippy::cast_possible_truncation)]
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(clippy::cast_possible_truncation)]
+            #[expect(clippy::cast_sign_loss)]
             n_cols: (bounding_box.width() / tile_size).round() as u32,
             n_subdivisions: 5,
             wrap_x: true, // I've not seen this overridden in Valhalla so far...
