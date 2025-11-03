@@ -30,6 +30,7 @@ pub enum WorkerResult {
 impl WorkerResult {
     /// Helper for constructing a JSON HTTP response.
     pub fn json<T: Serialize>(status_code: StatusCode, value: T) -> WorkerResult {
+        #[expect(clippy::missing_panics_doc)]
         let body = serde_json::to_vec(&value).expect("Programming error: either Serialize is incorrectly implemented, or the structure contains a map with non-string keys.");
         let mut headers = HeaderMap::new();
         headers.insert(

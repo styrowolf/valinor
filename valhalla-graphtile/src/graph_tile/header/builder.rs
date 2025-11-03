@@ -76,8 +76,8 @@ impl GraphTileHeaderBuilder {
             // (can theoretically be out of the accepted bounds, but this requires unsafe raw init,
             // and it won't corrupt the tile).
             .with_graph_id(self.graph_id.value().into())
-            .with_density_checked(self.density.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .with_density_checked(self.density)
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "density".to_string(),
                 value: usize::from(self.density),
             })?
@@ -88,83 +88,83 @@ impl GraphTileHeaderBuilder {
 
         let bit_field_2 = SecondBitfield::default()
             .with_node_count_checked(u32::try_from(self.node_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "node_count".to_string(),
-                value: usize::from(self.node_count),
+                value: self.node_count,
             })?
             .with_directed_edge_count_checked(u32::try_from(self.directed_edge_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "directed_edge_count".to_string(),
-                value: usize::from(self.directed_edge_count),
+                value: self.directed_edge_count,
             })?
             .with_predicted_speeds_count_checked(
                 u32::try_from(self.predicted_speed_profile_count)?.into(),
             )
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "predicted_speed_profile_count".to_string(),
-                value: usize::from(self.predicted_speed_profile_count),
+                value: self.predicted_speed_profile_count,
             })?;
 
         let transition_count_bitfield = TransitionCountBitfield::default()
             .with_transition_count_checked(u32::try_from(self.transition_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "transition_count".to_string(),
-                value: usize::from(self.transition_count),
+                value: self.transition_count,
             })?;
 
         let turn_lane_count_bitfield = TurnLaneCountBitfield::default()
             .with_turn_lane_count_checked(u32::try_from(self.turn_lane_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "turn_lane_count".to_string(),
-                value: usize::from(self.turn_lane_count),
+                value: self.turn_lane_count,
             })?;
 
         let transit_record_bitfield = TransitRecordBitfield::default()
             .with_transfer_count_checked(u16::try_from(self.transfer_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "transfer_count".to_string(),
-                value: usize::from(self.transfer_count),
+                value: self.transfer_count,
             })?
             .with_departure_count_checked(u32::try_from(self.departure_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "departure_count".to_string(),
-                value: usize::from(self.departure_count),
+                value: self.departure_count,
             })?
             .with_stop_count_checked(u16::try_from(self.stop_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "stop_count".to_string(),
-                value: usize::from(self.stop_count),
+                value: self.stop_count,
             })?;
 
         let misc_counts_bit_field_one = MiscCountsBitFieldOne::default()
             .with_route_count_checked(u16::try_from(self.route_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "route_count".to_string(),
-                value: usize::from(self.route_count),
+                value: self.route_count,
             })?
             .with_schedule_count_checked(u16::try_from(self.schedule_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "schedule_count".to_string(),
-                value: usize::from(self.schedule_count),
+                value: self.schedule_count,
             })?
             .with_sign_count_checked(u32::try_from(self.sign_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "sign_count".to_string(),
-                value: usize::from(self.sign_count),
+                value: self.sign_count,
             })?;
 
         let misc_counts_bit_field_two = MiscCountsBitFieldTwo::default()
             .with_access_restriction_count_checked(
                 u32::try_from(self.access_restriction_count)?.into(),
             )
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "access_restriction_count".to_string(),
-                value: usize::from(self.access_restriction_count),
+                value: self.access_restriction_count,
             })?
             .with_admin_count_checked(u16::try_from(self.admin_count)?.into())
-            .map_err(|_| GraphTileBuildError::BitfieldOverflow {
+            .map_err(|()| GraphTileBuildError::BitfieldOverflow {
                 field: "admin_count".to_string(),
-                value: usize::from(self.admin_count),
+                value: self.admin_count,
             })?;
 
         // Calculate the starting offset of the variable sized data areas
@@ -226,7 +226,7 @@ impl GraphTileHeaderBuilder {
             edge_info_offset: u32::try_from(edge_info_offset)?.into(),
             text_list_offset: u32::try_from(text_list_offset)?.into(),
             create_date: ((self.create_date - VALHALLA_EPOCH).num_days().max(0) as u32).into(),
-            bin_offsets: self.bin_offsets.map(|offset| offset.into()),
+            bin_offsets: self.bin_offsets.map(Into::into),
             lane_connectivity_offset: u32::try_from(lane_connectivity_offset)?.into(),
             predicted_speeds_offset: u32::try_from(predicted_speed_offset)?.into(),
             tile_size: u32::try_from(tile_size)?.into(),

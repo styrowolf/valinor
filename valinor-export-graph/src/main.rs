@@ -292,7 +292,8 @@ fn export_edges_for_tile<W: Write>(
                 return Err(LookupError::InvalidIndex)?;
             }
             Err(LookupError::MismatchedBase) => {
-                let (opp_graph_id, tile) = futures::executor::block_on(reader.get_opposing_edge(edge_id))?;
+                let (opp_graph_id, tile) =
+                    futures::executor::block_on(reader.get_opposing_edge(edge_id))?;
                 EdgePointer {
                     graph_id: opp_graph_id,
                     tile,

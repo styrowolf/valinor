@@ -90,7 +90,7 @@ impl HttpRequestInfo {
     }
 
     pub fn set_response_code(&mut self, code: u16) {
-        self.inner_bitfield.set_response_code(code.into())
+        self.inner_bitfield.set_response_code(code.into());
     }
 }
 

@@ -48,7 +48,9 @@ const DECODED_SPEED_SIZE: usize = 2 * COEFFICIENT_COUNT;
 /// and a surprisingly measurable (~5 sec -> ~3.5 sec) test execution time on bare metal
 /// (Apple Silicon M1 Max).
 static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
-    assert!(BUCKETS_PER_WEEK < 2usize.pow(24));
+    const {
+        assert!(BUCKETS_PER_WEEK < 2usize.pow(24));
+    }
 
     // DCT-III constants for speed decoding and normalization
     #[expect(
@@ -245,7 +247,7 @@ impl<'a> PredictedSpeeds<'a> {
         );
 
         let chunk_idx = start / COEFFICIENT_COUNT;
-        let coeffs = chunks.get(chunk_idx)?.map(|c| c.get());
+        let coeffs = chunks.get(chunk_idx)?.map(I16::get);
 
         Some(decompress_speed_bucket(&coeffs, bucket))
     }

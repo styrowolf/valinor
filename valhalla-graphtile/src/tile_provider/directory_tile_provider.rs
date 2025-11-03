@@ -3,12 +3,12 @@ use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::GraphTileHandle;
 use crate::graph_tile::{GraphTileBuildError, GraphTileBuilder};
 use crate::tile_provider::{GraphTileProvider, GraphTileProviderError, LockTable};
+use async_trait::async_trait;
 use lru::LruCache;
 use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use async_trait::async_trait;
 use tokio::{
     fs::File,
     io::{AsyncWriteExt, BufWriter},
@@ -67,6 +67,16 @@ impl DirectoryTileProvider {
     /// Additionally, if the write operation fails, your graph tile builder is gone.
     /// The original file on disk is not in a dirty state, but to retry again,
     /// the caller would need to reconstruct the same builder from scratch.
+    ///
+    /// # Errors
+    ///
+    /// This function may fail in a variety of cases that are returned as errors:
+    ///
+    /// - The tile was explicitly constructed with an invalid graph ID
+    /// - The graph tile builder is invalid (see [`GraphTileBuilder::into_byte_iter`] for details)
+    /// - Writing the temporary file fails
+    /// - The atomic file rename fails
+    /// - The internal tile cache lock is corrupted (this should never happen; if it does, it's an error in Valinor)
     pub async fn overwrite_tile(
         &self,
         graph_tile_builder: GraphTileBuilder<'_>,

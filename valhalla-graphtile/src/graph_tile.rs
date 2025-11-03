@@ -602,7 +602,7 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
                 },
             )?;
         let edge_bins = edge_bins
-            .into_iter()
+            .iter()
             .map(|it| GraphId::try_from_id(it.get()))
             .collect::<Result<Vec<_>, _>>()?;
 

@@ -333,7 +333,7 @@ impl DirectedEdge {
     /// Set the estimated speed of the edge when there is no traffic, in kph.
     #[inline]
     pub const fn set_free_flow_speed(&mut self, speed: u8) {
-        self.third_bitfield.set_free_flow_speed(speed)
+        self.third_bitfield.set_free_flow_speed(speed);
     }
 
     /// The estimated speed of the edge when there is traffic, in kph.
@@ -345,7 +345,7 @@ impl DirectedEdge {
     /// Set the estimated speed of the edge when there is traffic, in kph.
     #[inline]
     pub const fn set_constrained_speed(&mut self, speed: u8) {
-        self.third_bitfield.set_constrained_flow_speed(speed)
+        self.third_bitfield.set_constrained_flow_speed(speed);
     }
 
     /// The estimated speed of the edge for trucks, in kph.
@@ -357,7 +357,7 @@ impl DirectedEdge {
     /// Set the estimated speed of the edge for trucks, in kph.
     #[inline]
     pub const fn set_truck_speed(mut self, speed: u8) {
-        self.third_bitfield.set_truck_speed(speed)
+        self.third_bitfield.set_truck_speed(speed);
     }
 
     /// The way the edge is used.

@@ -1,8 +1,8 @@
 use crate::GraphId;
-use std::sync::Arc;
 use async_trait::async_trait;
-use thiserror::Error;
 use dashmap::DashMap;
+use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::Mutex;
 
 // TODO: mmapped tarball version
@@ -111,10 +111,13 @@ pub trait GraphTileProvider {
 pub(crate) struct LockTable<K>(DashMap<K, Arc<Mutex<()>>>);
 
 impl<K: std::hash::Hash + Eq + Clone> LockTable<K> {
-    pub fn new() -> Self { Self(DashMap::new()) }
+    pub fn new() -> Self {
+        Self(DashMap::new())
+    }
 
     pub fn lock_for(&self, k: K) -> Arc<Mutex<()>> {
-        self.0.entry(k.clone())
+        self.0
+            .entry(k)
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     }

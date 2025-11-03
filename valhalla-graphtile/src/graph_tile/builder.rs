@@ -94,7 +94,7 @@ pub struct GraphTileBuilder<'a> {
     text_memory: Cow<'a, [u8]>,
     lane_connectivity_memory: Cow<'a, [u8]>,
     predicted_speed_offsets: Cow<'a, [U32<LE>]>,
-    /// Raw profile memory (n_profiles x COEFFICIENT_COUNT entries back to back)
+    /// Raw profile memory (`n_profiles x COEFFICIENT_COUNT` entries back to back)
     predicted_speed_profile_memory: Cow<'a, [I16<LE>]>,
 }
 
@@ -221,7 +221,7 @@ impl GraphTileBuilder<'_> {
     fn with_compressed_speeds(
         self,
         directed_edge_index: usize,
-        coefficients: [i16; COEFFICIENT_COUNT],
+        coefficients: &[i16; COEFFICIENT_COUNT],
     ) -> Result<Self, GraphTileBuildError> {
         let mut result = self.grow_predicted_speeds_if_needed(true);
         if directed_edge_index >= result.directed_edges.len() {
@@ -246,7 +246,7 @@ impl GraphTileBuilder<'_> {
         // Add the predicted speeds after encoding them.
         let predicted_speed_profiles = result.predicted_speed_profile_memory.to_mut();
         predicted_speed_profiles
-            .extend::<[I16<LE>; COEFFICIENT_COUNT]>(coefficients.map(|coeff| coeff.into()));
+            .extend::<[I16<LE>; COEFFICIENT_COUNT]>(coefficients.map(Into::into));
 
         Ok(result)
     }
@@ -268,7 +268,7 @@ impl GraphTileBuilder<'_> {
     ) -> Result<Self, GraphTileBuildError> {
         self.with_compressed_speeds(
             directed_edge_index,
-            decode_compressed_speeds(compressed_speeds)?,
+            &decode_compressed_speeds(compressed_speeds)?,
         )
     }
 
@@ -287,7 +287,7 @@ impl GraphTileBuilder<'_> {
         directed_edge_index: usize,
         speeds: &[f32; BUCKETS_PER_WEEK],
     ) -> Result<Self, GraphTileBuildError> {
-        self.with_compressed_speeds(directed_edge_index, compress_speed_buckets(speeds))
+        self.with_compressed_speeds(directed_edge_index, &compress_speed_buckets(speeds))
     }
 
     fn grow_predicted_speeds_if_needed(self, force_create_offsets_array: bool) -> Self {
@@ -333,6 +333,15 @@ impl GraphTileBuilder<'_> {
     /// * Setting a creation date more than 11,758,979.59 years after January 1, 2014
     ///
     /// TL;DR, things that you really shouldn't do, or are a clear programming error.
+    ///
+    /// # Panics
+    ///
+    /// This function includes several assertions.
+    /// These do _not_ introduce noticeable runtime overhead
+    /// and should not trigger during regular operation.
+    /// The assertions exist to verify invariants of the generated tile.
+    ///
+    /// If you hit any of these, it is a bug in Valinor, not your code.
     pub fn into_byte_iter(self) -> Result<impl Iterator<Item = Box<[u8]>>, GraphTileBuildError> {
         // Validate and finalize predicted speeds arrays (sizes and counts)
         let intermediate = self.grow_predicted_speeds_if_needed(false);
@@ -353,7 +362,7 @@ impl GraphTileBuilder<'_> {
                     .len()
                     .is_multiple_of(COEFFICIENT_COUNT),
                 "Expected the speed profile memory size to be some multiple of {COEFFICIENT_COUNT} (this is a bug in the builder)."
-            )
+            );
         }
 
         // Build the header from the finalized state, then own the header bytes.
@@ -380,10 +389,7 @@ impl GraphTileBuilder<'_> {
             access_restriction_count: intermediate.access_restrictions.len(),
             admin_count: intermediate.admins.len(),
             create_date: intermediate.create_date,
-            bin_offsets: intermediate
-                .remove_me_header
-                .bin_offsets
-                .map(|offset| offset.into()),
+            bin_offsets: intermediate.remove_me_header.bin_offsets.map(Into::into),
             complex_forward_restrictions_size: intermediate
                 .complex_forward_restrictions_memory
                 .len(),
@@ -516,20 +522,14 @@ impl TileBuildStage {
     }
 }
 
-impl<'a> Iterator for TileByteIter<'a> {
+impl Iterator for TileByteIter<'_> {
     type Item = Box<[u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let bytes = match self.stage {
-            TileBuildStage::Header => {
-                std::mem::take(&mut self.header).into_boxed_slice()
-            }
-            TileBuildStage::Nodes => {
-                bytes_from_items(std::mem::take(&mut self.nodes))
-            }
-            TileBuildStage::Transitions => {
-                bytes_from_items(std::mem::take(&mut self.transitions))
-            }
+            TileBuildStage::Header => std::mem::take(&mut self.header).into_boxed_slice(),
+            TileBuildStage::Nodes => bytes_from_items(std::mem::take(&mut self.nodes)),
+            TileBuildStage::Transitions => bytes_from_items(std::mem::take(&mut self.transitions)),
             TileBuildStage::DirectedEdges => {
                 bytes_from_items(std::mem::take(&mut self.directed_edges))
             }
@@ -554,30 +554,20 @@ impl<'a> Iterator for TileByteIter<'a> {
             TileBuildStage::TransitTransfers => {
                 bytes_from_items(std::mem::take(&mut self.transit_transfers))
             }
-            TileBuildStage::Signs => {
-                bytes_from_items(std::mem::take(&mut self.signs))
-            }
-            TileBuildStage::TurnLanes => {
-                bytes_from_items(std::mem::take(&mut self.turn_lanes))
-            }
-            TileBuildStage::Admins => {
-                bytes_from_items(std::mem::take(&mut self.admins))
-            }
-            TileBuildStage::EdgeBins => {
-                bytes_from_items(std::mem::take(&mut self.edge_bins))
-            }
-            TileBuildStage::ComplexForwardRestrictions => {
-                bytes_from_items(std::mem::take(&mut self.complex_forward_restrictions_memory))
-            }
-            TileBuildStage::ComplexReverseRestrictions => {
-                bytes_from_items(std::mem::take(&mut self.complex_reverse_restrictions_memory))
-            }
+            TileBuildStage::Signs => bytes_from_items(std::mem::take(&mut self.signs)),
+            TileBuildStage::TurnLanes => bytes_from_items(std::mem::take(&mut self.turn_lanes)),
+            TileBuildStage::Admins => bytes_from_items(std::mem::take(&mut self.admins)),
+            TileBuildStage::EdgeBins => bytes_from_items(std::mem::take(&mut self.edge_bins)),
+            TileBuildStage::ComplexForwardRestrictions => bytes_from_items(std::mem::take(
+                &mut self.complex_forward_restrictions_memory,
+            )),
+            TileBuildStage::ComplexReverseRestrictions => bytes_from_items(std::mem::take(
+                &mut self.complex_reverse_restrictions_memory,
+            )),
             TileBuildStage::EdgeInfo => {
                 bytes_from_items(std::mem::take(&mut self.edge_info_memory))
             }
-            TileBuildStage::TextMemory => {
-                bytes_from_items(std::mem::take(&mut self.text_memory))
-            }
+            TileBuildStage::TextMemory => bytes_from_items(std::mem::take(&mut self.text_memory)),
             TileBuildStage::LaneConnectivity => {
                 bytes_from_items(std::mem::take(&mut self.lane_connectivity_memory))
             }
@@ -589,7 +579,7 @@ impl<'a> Iterator for TileByteIter<'a> {
             }
             TileBuildStage::Done => {
                 // No more sections
-                return None
+                return None;
             }
         };
 
@@ -604,8 +594,8 @@ where
 {
     let items = items.as_ref();
     // Reserve an estimated capacity to minimize reallocations
-    let mut buf = Vec::with_capacity(items.len() * size_of::<T>());
-    for v in items.iter() {
+    let mut buf = Vec::with_capacity(size_of_val(items));
+    for v in items {
         buf.extend(v.as_bytes());
     }
 
