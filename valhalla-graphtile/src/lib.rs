@@ -1,11 +1,11 @@
 #![doc = include_str!("../README.md")]
 
-// Private modules by default
 mod graph_id;
 pub mod graph_tile;
 pub mod shape_codec;
 pub mod tile_hierarchy;
 pub mod tile_provider;
+pub mod traffic_tile;
 
 use enumset::{EnumSet, EnumSetType, enum_set};
 use std::borrow::Cow;
@@ -62,7 +62,7 @@ impl RoadClass {
     }
 
     pub const fn discriminant(&self) -> u8 {
-        // Safety: If the enum specifies a primitive representation,
+        // SAFETY: If the enum specifies a primitive representation,
         // then the discriminant may be reliably accessed via unsafe pointer casting.
         // https://doc.rust-lang.org/reference/items/enumerations.html#pointer-casting
         unsafe { *std::ptr::from_ref::<Self>(self).cast::<u8>() }

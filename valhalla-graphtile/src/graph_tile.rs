@@ -1,12 +1,22 @@
+//! # Routing Graph Tiles
+//!
+//! This module provides definitions for Valhalla-compatible routing graph tiles.
+//! Access is defined by the [`GraphTile`] trait.
+//! The memory layout, down to the bit level, is specified in the individual data structures.
+//! Start at the [`GraphTileView`], which can reinterpret a byte slice safely as a tile,
+//! and work down from there as needed.
+//! For writing tiles, a safe builder API is provided in [`GraphTileBuilder`].
+use std::sync::Arc;
 use thiserror::Error;
 use zerocopy::{FromBytes, I16, LE, U32, U64, transmute};
 
 use enumset::EnumSet;
+use memmap2::MmapRaw;
 use self_cell::self_cell;
 #[cfg(test)]
 use std::sync::LazyLock;
 // To keep files manageable, we will keep internal modules specific to each mega-struct,
-// and publicly re-export the public type.
+// and re-export the public type.
 // Each struct should be tested on fixture tiles to a reasonable level of confidence.
 // Leverage snapshot tests where possible, compare with Valhalla C++ results,
 // and test the first and last elements of variable length vectors
@@ -190,17 +200,187 @@ pub trait GraphTile {
 }
 
 self_cell! {
-    /// A read-only owned view of a graph tile.
-    ///
-    /// This can be constructed from an owned byte array, `Vec<u8>`.
-    pub struct GraphTileHandle {
+    /// A read-only view of a graph tile.
+    pub struct OwnedGraphTileHandle {
         owner: Vec<u8>,
         #[covariant]
         dependent: GraphTileView,
     }
 }
 
-impl GraphTile for GraphTileHandle {
+/// An encapsulating type that can be used to get the actual bytes for a tile.
+///
+/// This provides a single type that can "own" the backing bytes for tile memory,
+/// which we leverage in the `self_cell` to create a zero-copy view.
+///
+/// # Safety
+///
+/// This doesn't make any strong synchronization guarantees.
+/// In fact, it's probably wildly unsafe if you have a map.
+pub struct MmapTilePointer {
+    /// A handle to the memory map that can be shared across threads.
+    pub(crate) mmap: Arc<MmapRaw>,
+    /// The offsets of the represented data within the memory map.
+    pub(crate) offsets: TileOffset,
+}
+
+impl MmapTilePointer {
+    /// Returns a slice view over the data mapped in memory.
+    ///
+    /// # Safety
+    ///
+    /// The backing memory map must **never** be mutated during the lifetime of the returned slice.
+    /// Additionally, we explicitly assume that the index and offsets describe a valid tile.
+    pub unsafe fn as_tile_bytes(&self) -> &[u8] {
+        unsafe {
+            // `as_ptr` assumes that the file has not been truncated, or else raises a SIGBUS.
+            let start_ptr = self.mmap.as_ptr().offset(self.offsets.offset as isize);
+            // Assumes the offset and size are valid.
+            core::slice::from_raw_parts(start_ptr, self.offsets.size as usize)
+        }
+    }
+
+    /// Reads from the mapped range and interprets it as type `T`.
+    ///
+    /// The instance of `T` is created from a _bitwise_ copy of the data.
+    /// This uses [`core::ptr::read_volatile`] under the hood to make sure the I/O actually happens.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the read is not naturally aligned (checked in an assertion).
+    ///
+    /// # Safety
+    ///
+    /// The approach taken here mirrors that of Valhalla,
+    /// which I'm not sure is fundamentally sound,
+    /// though it may be *practically* acceptable on x86_64 for the places it's used
+    /// (traffic tile access via a shared memory map).
+    ///
+    /// There are a lot of things that can go wrong here.
+    /// The following will likely result in a SIGBUS:
+    ///
+    /// - Truncating the memory mapped file.
+    /// - Remapping or resizing the map.
+    ///
+    /// The following are also obviously unsafe and will cause either a panic or undefined behavior:
+    ///
+    /// - Trying to read a value where `size_of::<T>()` doesn't match the size of the pointer.
+    ///   We statically assert this, and if you fail to uphold this invariant, the program will panic.
+    /// - Reading an offset or size out of bounds.
+    ///
+    /// Finally, while this does force a volatile read,
+    /// NO ATTEMPT IS MADE AT SYNCHRONIZATION!
+    /// This is, regrettably, how Valhalla currently does things.
+    /// There should probably be atomics involved to synchronize writes,
+    /// but that requires some internal Valhalla evolution,
+    /// which would result in some breaking changes.
+    ///
+    /// As far as I can tell, this is *practically* acceptable if the writer
+    /// is always storing values of a size that are guaranteed to be atomic
+    /// by the underlying architecture, provided that:
+    ///
+    /// - No logical field ever crosses a _byte_ boundary, OR
+    /// - All reads and writes are naturally aligned AND integer operations are atomic for that size
+    ///   on the architecture AND no logical field crosses a boundary between two such larger width integers
+    ///
+    /// Concretely, this means that **writers must use a larger size integer type
+    /// if fields can span across byte boundaries (as they do in traffic tiles)
+    /// as the byte-level reads would permit tearing.**
+    pub unsafe fn read_volatile<T>(&self) -> T {
+        assert_eq!(
+            size_of::<T>(),
+            self.offsets
+                .size
+                .try_into()
+                .expect("u32 does not fit into usize... that's unexpected!"),
+            "You can't try an unsafe cast on a byte range of the wrong size!"
+        );
+        // SAFETY: Assumes that the offset is valid.
+        // The pointer arithmetic must never be greater than isize::MAX,
+        // which we satisfy implicitly as it is of type `u32` and we do not support
+        // any CPU with pointers smaller than 64-bits.
+        unsafe {
+            let ptr = self
+                .mmap
+                .as_ptr()
+                .add(self.offsets.offset as usize)
+                .cast::<T>();
+            assert!(ptr.is_aligned());
+
+            ptr.read_volatile()
+        }
+    }
+
+    /// Writes the value to the mapped range.
+    ///
+    /// This will fail to compile if lock-free atomics are not supported for the current target
+    /// for types of `size_of::<T>()`.
+    /// This is statically checked at compile time.
+    /// More on this later...
+    ///
+    /// # Panics
+    ///
+    /// - If `self.offsets.size` does not match the size of type `T` (clearly incorrect).
+    /// - If the pointer is not aligned for type `T` (no major platform guarantees atomicity).
+    ///
+    /// # Safety
+    ///
+    /// The following will likely result in a SIGBUS:
+    ///
+    /// - Truncating the memory mapped file.
+    /// - Remapping or resizing the map.
+    ///
+    /// The following are also obviously unsafe and will cause either a panic or undefined behavior:
+    ///
+    /// - Reading an offset or size out of bounds.
+    /// - Language specs indicate that unsynchronized concurrent reads and writes are UB.
+    ///   By making reads and writes volatile, we mitigate one source of uncertainty,
+    ///   instructing the compiler that it can never optimize these away.
+    ///   However, shared memory maps have NO inherent synchronization.
+    ///   The check for lock-free atomics on the target for this value size _typically_ indicates
+    ///   that loads and stores **to memory** are atomic for naturally aligned pointers.
+    ///   This implies nothing about _ordering_, but it does protect against torn writes.
+    pub unsafe fn write_volatile<T>(&self, value: T) -> () {
+        const {
+            let has_atomic = match size_of::<T>() {
+                1 => cfg!(target_has_atomic = "8"),
+                2 => cfg!(target_has_atomic = "16"),
+                4 => cfg!(target_has_atomic = "32"),
+                8 => cfg!(target_has_atomic = "64"),
+                16 => cfg!(target_has_atomic = "128"),
+                _ => false,
+            };
+            assert!(
+                has_atomic,
+                "This type does not have a lock-free atomic support (it's probably too wide) on your current target."
+            );
+        };
+
+        assert_eq!(self.offsets.size, size_of::<T>() as u32);
+        unsafe {
+            // SAFETY: Assumes that the offset is valid.
+            let ptr = self
+                .mmap
+                .as_mut_ptr()
+                .add(self.offsets.offset as usize)
+                .cast::<T>();
+            assert!(ptr.is_aligned());
+
+            ptr.write_volatile(value);
+        }
+    }
+}
+
+/// A tile offset, used for internal storage out of the parsed index.
+#[derive(Copy, Clone)]
+pub(crate) struct TileOffset {
+    /// Byte offset from the beginning of the tar
+    pub(crate) offset: u64,
+    /// The size of the tile in bytes.
+    pub(crate) size: u32,
+}
+
+impl GraphTile for OwnedGraphTileHandle {
     #[inline]
     fn graph_id(&self) -> GraphId {
         self.borrow_dependent().graph_id()
@@ -275,18 +455,18 @@ impl GraphTile for GraphTileHandle {
     }
 }
 
-impl TryFrom<Vec<u8>> for GraphTileHandle {
+impl TryFrom<Vec<u8>> for OwnedGraphTileHandle {
     type Error = GraphTileDecodingError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        GraphTileHandle::try_new(value, |data| GraphTileView::try_from(data.as_ref()))
+        OwnedGraphTileHandle::try_new(value, |data| GraphTileView::try_from(data.as_slice()))
     }
 }
 
 /// An internal view over a single tile in the Valhalla hierarchical tile graph.
 ///
 /// Access should normally go through the [``GraphTile``](GraphTile) trait.
-struct GraphTileView<'a> {
+pub struct GraphTileView<'a> {
     /// Header with various metadata about the tile and internal sizes.
     header: GraphTileHeader,
     /// The list of nodes in the graph tile.
@@ -712,7 +892,7 @@ const TEST_GRAPH_TILE_ID_L0: GraphId = unsafe { GraphId::from_components_uncheck
 const TEST_GRAPH_TILE_ID_L2: GraphId = unsafe { GraphId::from_components_unchecked(2, 762485, 0) };
 
 #[cfg(test)]
-static TEST_GRAPH_TILE_L0: LazyLock<GraphTileHandle> = LazyLock::new(|| {
+static TEST_GRAPH_TILE_L0: LazyLock<OwnedGraphTileHandle> = LazyLock::new(|| {
     let relative_path = TEST_GRAPH_TILE_ID_L0
         .file_path("gph")
         .expect("Unable to get relative path");
@@ -722,11 +902,11 @@ static TEST_GRAPH_TILE_L0: LazyLock<GraphTileHandle> = LazyLock::new(|| {
         .join(relative_path);
     let bytes = std::fs::read(path).expect("Unable to read file");
 
-    GraphTileHandle::try_from(bytes).expect("Unable to get tile")
+    OwnedGraphTileHandle::try_from(bytes).expect("Unable to get tile")
 });
 
 #[cfg(test)]
-static TEST_GRAPH_TILE_L2: LazyLock<GraphTileHandle> = LazyLock::new(|| {
+static TEST_GRAPH_TILE_L2: LazyLock<OwnedGraphTileHandle> = LazyLock::new(|| {
     let relative_path = TEST_GRAPH_TILE_ID_L2
         .file_path("gph")
         .expect("Unable to get relative path");
@@ -736,7 +916,7 @@ static TEST_GRAPH_TILE_L2: LazyLock<GraphTileHandle> = LazyLock::new(|| {
         .join(relative_path);
     let bytes = std::fs::read(path).expect("Unable to read file");
 
-    GraphTileHandle::try_from(bytes).expect("Unable to get tile")
+    OwnedGraphTileHandle::try_from(bytes).expect("Unable to get tile")
 });
 
 /// Test data note: this relies on a binary fixture
@@ -751,7 +931,7 @@ static TEST_GRAPH_TILE_L2: LazyLock<GraphTileHandle> = LazyLock::new(|| {
 /// 0/3015/7,12,34,CKD/4f/r/+H/6//g/+v/4P/q/9//6v/f/+r/3v/q/93/6f/b/+n/2v/o/9f/5//V/+b/0f/l/8z/4//G/+D/vf/d/67/1/+V/8z/Xf+u/nz+GwLJAEcAqwAWAFwABwA8AAAAK//8ACD/+AAZ//YAE//0AA//8gAM//AACf/uAAb/7AAE/+kAAv/m////4v/9/93/+f/U//T/xf/q/5//y/6PAQMAngApADkAFwAfABAAEwAMAAwACQAHAAcAAwAGAAAABf/9AAT/+wAD//kAA//2AAL/9AAC//EAAf/tAAH/6AAA/+EAAP/U////tv///x8AFADL//8AQ///ACf//gAa//4AE//+AA7//QAL//0ACP/9AAb//AAE//wAAv/8AAD/+//+//v//P/6//r/+v/2//n/8v/4/+v/9f/b/+//nP+TALoADAAyAAMAHgAAABX//gAQ//0ADf/9AAv//AAJ//sAB//7AAb/+gAF//kABP/4AAP/9wAC//YAAf/1AAD/8//+//D//P/q//f/2w==
 /// ```
 #[cfg(test)]
-static TEST_GRAPH_TILE_WITH_FLOW: LazyLock<GraphTileHandle> = LazyLock::new(|| {
+static TEST_GRAPH_TILE_WITH_FLOW: LazyLock<OwnedGraphTileHandle> = LazyLock::new(|| {
     let relative_path = TEST_GRAPH_TILE_ID_L0
         .file_path("gph")
         .expect("Unable to get relative path");
@@ -761,7 +941,7 @@ static TEST_GRAPH_TILE_WITH_FLOW: LazyLock<GraphTileHandle> = LazyLock::new(|| {
         .join(relative_path);
     let bytes = std::fs::read(path).expect("Unable to read file");
 
-    GraphTileHandle::try_from(bytes).expect("Unable to get tile")
+    OwnedGraphTileHandle::try_from(bytes).expect("Unable to get tile")
 });
 
 #[cfg(test)]

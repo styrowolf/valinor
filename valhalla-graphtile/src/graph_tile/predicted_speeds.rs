@@ -48,10 +48,6 @@ const DECODED_SPEED_SIZE: usize = 2 * COEFFICIENT_COUNT;
 /// and a surprisingly measurable (~5 sec -> ~3.5 sec) test execution time on bare metal
 /// (Apple Silicon M1 Max).
 static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
-    const {
-        assert!(BUCKETS_PER_WEEK < 2usize.pow(24));
-    }
-
     // DCT-III constants for speed decoding and normalization
     #[expect(
         clippy::cast_precision_loss,
@@ -61,7 +57,16 @@ static COS_TABLE: LazyLock<Box<[[f32; COEFFICIENT_COUNT]]>> = LazyLock::new(|| {
 
     // Uses the trig_const crate to precompute this at compile time within an acceptable range of error.
     // If sqrt is ever made stable in const contexts, we can drop this dependency.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "This value is guaranteed to be small, since BUCKETS_PER_WEEK is small."
+    )]
     const SPEED_NORM: f32 = const { trig_const::sqrt(2.0 / BUCKETS_PER_WEEK as f64) as f32 };
+
+    const {
+        assert!(BUCKETS_PER_WEEK < 2usize.pow(24));
+    }
 
     let mut rows: Vec<[f32; COEFFICIENT_COUNT]> = vec![[0.0; COEFFICIENT_COUNT]; BUCKETS_PER_WEEK];
 
@@ -123,6 +128,10 @@ pub fn compress_speed_buckets(speeds: &[f32; BUCKETS_PER_WEEK]) -> [i16; COEFFIC
 
     // Quantize (round) directly to i16
     let mut result = [0i16; COEFFICIENT_COUNT];
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "We already round the value, so truncation is not possible."
+    )]
     for (i, coeff) in acc.iter().enumerate() {
         result[i] = coeff.round() as i16;
     }
