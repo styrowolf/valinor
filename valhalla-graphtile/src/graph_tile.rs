@@ -8,7 +8,7 @@
 //! For writing tiles, a safe builder API is provided in [`GraphTileBuilder`].
 use std::sync::Arc;
 use thiserror::Error;
-use zerocopy::{FromBytes, I16, LE, U32, U64, transmute};
+use zerocopy::{FromBytes, I16, LE, U32, transmute};
 
 use enumset::EnumSet;
 use memmap2::MmapRaw;
@@ -197,6 +197,28 @@ pub trait GraphTile {
 
     /// Administrative regions covered in this tile.
     fn admins(&self) -> &[Admin];
+
+    /// Returns the list of edge IDs contained in the specified bin.
+    ///
+    /// The bin contents are stored as a single concatenated array with prefix offsets
+    /// for each bin in the tile header. This method returns a slice view into that array.
+    ///
+    /// # Panics
+    ///
+    /// This may panic if the tile data is invalid and references an out-of-bounds index.
+    fn edges_in_bin(&self, bin_index: usize) -> &[GraphId];
+
+    /// Computes the row-major bin index for the given bin coordinates within
+    /// the tile's bin grid.
+    ///
+    /// # Panics
+    ///
+    /// This function assumes that the level in the graph tile header is a standard Valhalla level.
+    /// Non-standard values will cause a panic.
+    ///
+    /// This function also assumes that the `x` and `y` values are within the accepted range
+    /// (specifically, they must each be <= the square root of [`crate::BIN_COUNT`]).
+    fn bin_index_xy(&self, x: usize, y: usize) -> usize;
 }
 
 self_cell! {
@@ -453,6 +475,16 @@ impl GraphTile for OwnedGraphTileHandle {
     fn admins(&self) -> &[Admin] {
         self.borrow_dependent().admins()
     }
+
+    #[inline]
+    fn edges_in_bin(&self, bin_index: usize) -> &[GraphId] {
+        self.borrow_dependent().edges_in_bin(bin_index)
+    }
+
+    #[inline]
+    fn bin_index_xy(&self, x: usize, y: usize) -> usize {
+        self.borrow_dependent().bin_index_xy(x, y)
+    }
 }
 
 impl TryFrom<Vec<u8>> for OwnedGraphTileHandle {
@@ -465,7 +497,7 @@ impl TryFrom<Vec<u8>> for OwnedGraphTileHandle {
 
 /// An internal view over a single tile in the Valhalla hierarchical tile graph.
 ///
-/// Access should normally go through the [``GraphTile``](GraphTile) trait.
+/// Access should normally go through the [`GraphTile`] trait.
 pub struct GraphTileView<'a> {
     /// Header with various metadata about the tile and internal sizes.
     header: GraphTileHeader,
@@ -484,7 +516,7 @@ pub struct GraphTileView<'a> {
     signs: &'a [Sign],
     turn_lanes: &'a [TurnLane],
     admins: &'a [Admin],
-    edge_bins: Vec<GraphId>,
+    edge_bins: &'a [GraphId],
     complex_forward_restrictions_memory: &'a [u8],
     complex_reverse_restrictions_memory: &'a [u8],
     // Variable length byte arrays (indexed into at various other points; hidden with public safe accessors)...
@@ -525,12 +557,6 @@ impl GraphTile for GraphTileView<'_> {
         }
     }
 
-    /// Gets a reference to the directed edge in this tile by graph ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the graph ID cannot be contained in this tile
-    /// or the index is invalid.
     fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
         if self.may_contain_id(id) {
             self.directed_edges
@@ -618,6 +644,34 @@ impl GraphTile for GraphTileView<'_> {
     #[inline]
     fn admins(&self) -> &[Admin] {
         self.admins
+    }
+
+    #[inline]
+    fn edges_in_bin(&self, bin_index: usize) -> &[GraphId] {
+        if self.edge_bins.is_empty() {
+            return &[];
+        }
+        let (start, end) = self.header.edge_bin_offsets(bin_index);
+        assert!(
+            end <= self.edge_bins.len(),
+            "Unexpected end that runs past the edge bins structure"
+        );
+        &self.edge_bins[start..end]
+    }
+
+    #[inline]
+    fn bin_index_xy(&self, x: usize, y: usize) -> usize {
+        assert!(x << 1 < crate::BIN_COUNT, "x must be less than the square root of crate::BIN_COUNT");
+        assert!(y << 1 < crate::BIN_COUNT, "y must be less than the square root of crate::BIN_COUNT");
+
+        let level = self.header.graph_id().level();
+        // Find the subdivision count for this level (defaults to 5 if unknown)
+        let n_subdivisions = crate::tile_hierarchy::STANDARD_LEVELS
+            .iter()
+            .find(|lvl| lvl.level == level)
+            .map(|lvl| lvl.tiling_system.n_subdivisions as usize)
+            .expect("Only Valhalla standard tile levels are supported");
+        y * n_subdivisions + x
     }
 }
 
@@ -775,16 +829,12 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
             )?;
 
         let (edge_bins, bytes) =
-            <[U64<LE>]>::ref_from_prefix_with_elems(bytes, header.edge_bins_count()).map_err(
+            <[GraphId]>::ref_from_prefix_with_elems(bytes, header.edge_bins_count()).map_err(
                 |e| GraphTileDecodingError::CastError {
                     field: "edge_bins".to_string(),
                     error_description: e.to_string(),
                 },
             )?;
-        let edge_bins = edge_bins
-            .iter()
-            .map(|it| GraphId::try_from_id(it.get()))
-            .collect::<Result<Vec<_>, _>>()?;
 
         let (complex_forward_restrictions_memory, bytes) =
             <[u8]>::ref_from_prefix_with_elems(bytes, header.complex_forward_restrictions_size())
@@ -1036,6 +1086,39 @@ mod tests {
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
             insta::assert_yaml_snapshot!(tile_view.edge_bins);
+        }
+    }
+
+    #[test]
+    fn test_bin_accessors_integrity() {
+        // Level without bins should yield empty slices across all bins
+        let l0 = &*TEST_GRAPH_TILE_L0;
+        let l0_view = l0.borrow_dependent();
+        let mut total = 0usize;
+        for i in 0..crate::BIN_COUNT {
+            let bin = l0_view.edges_in_bin(i);
+            assert!(bin.is_empty(), "L0 has no bins, bin {i} should be empty");
+            total += bin.len();
+        }
+        assert_eq!(total, 0);
+
+        // Level with bins should have slices that sum to the backing array size
+        let l2 = &*TEST_GRAPH_TILE_L2;
+        let l2_view = l2.borrow_dependent();
+        let mut total = 0usize;
+        for i in 0..crate::BIN_COUNT {
+            total += l2_view.edges_in_bin(i).len();
+        }
+        assert_eq!(total, l2_view.edge_bins.len());
+
+        // Check bin index mapping at corners doesn't panic and returns a valid index
+        let n = 5;
+        let idx_tl = l2_view.bin_index_xy(0, 0);
+        let idx_tr = l2_view.bin_index_xy(n - 1, 0);
+        let idx_bl = l2_view.bin_index_xy(0, n - 1);
+        let idx_br = l2_view.bin_index_xy(n - 1, n - 1);
+        for idx in [idx_tl, idx_tr, idx_bl, idx_br] {
+            assert!(idx < crate::BIN_COUNT);
         }
     }
 

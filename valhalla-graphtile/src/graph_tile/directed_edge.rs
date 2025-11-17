@@ -7,6 +7,9 @@ use std::fmt::{Debug, Formatter};
 use zerocopy::{LE, U16, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
 
+#[cfg(feature = "openlr")]
+use openlr::Fow;
+
 #[bitfield(u64,
     repr = U64<LE>,
     from = bit_twiddling_helpers::conv_u64le::from_inner,
@@ -263,7 +266,9 @@ pub struct DirectedEdge {
 impl DirectedEdge {
     // TODO: Dozens of access helpers :)
 
-    /// Is this a transit line (buss or rail)?
+    /// The end node ID for this directed edge.
+    ///
+    /// NOTE: The directed edge's graph ID is also the ID of its start node.
     #[inline]
     pub const fn end_node_id(&self) -> GraphId {
         // SAFETY: We know that the bit field cannot contain a value
@@ -363,7 +368,7 @@ impl DirectedEdge {
 
     /// The way the edge is used.
     #[inline]
-    pub fn edge_use(&self) -> RoadUse {
+    pub const fn edge_use(&self) -> RoadUse {
         self.third_bitfield.edge_use()
     }
 
@@ -452,6 +457,13 @@ impl DirectedEdge {
         // SAFETY: The access bits are length 12, so invalid representations are impossible.
         unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access().get()) }
     }
+
+    /// The length of the edge (in meters)
+    #[inline]
+    pub const fn length(&self) -> u32 {
+        self.fifth_bitfield.length().get()
+    }
+
 }
 
 // The bitfield struct macros break serde field attributes, so we roll our own for now.

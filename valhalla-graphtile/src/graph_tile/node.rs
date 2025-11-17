@@ -161,6 +161,7 @@ impl NodeInfo {
     /// The data is stored as a relative offset internally,
     /// so a reference coordinate (namely the SW corner of the tile)
     /// is required to compute the absolute position.
+    /// You can get this from the graph tile header.
     #[inline]
     #[expect(clippy::cast_possible_truncation)]
     pub fn coordinate(&self, sw_corner: Coord<f32>) -> Coord<f32> {

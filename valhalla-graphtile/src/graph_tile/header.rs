@@ -194,13 +194,18 @@ pub struct GraphTileHeader {
     /// The date the tile was created, expressed as the number of days (rounded down)
     /// since midnight of Jan 1, 2014, Eastern Standard Time.
     create_date: U32<LE>,
-    /// Offsets for each bin of the grid (for search/lookup)
+    /// Offsets for each bin of the grid
     ///
-    /// This should eventually be hidden and replaced with friendlier accessors.
+    /// This is used for search/lookup from a geographic location.
+    /// By dividing the tile into a 5x5 grid, we can reduce the number of iterations
+    /// to find a specific edge.
+    ///
+    /// NOTE: Valhalla only actually does binning at level 2,
+    /// so these values will be zeroes for other levels.
     pub(super) bin_offsets: [U32<LE>; BIN_COUNT],
-    /// Offset to the beginning of the variable sized data.
+    /// Offset to the beginning of the variable length data.
     lane_connectivity_offset: U32<LE>,
-    /// Offset to the beginning of the variable sized data.
+    /// Offset to the beginning of the variable length data.
     predicted_speeds_offset: U32<LE>,
     /// The size of the tile (in bytes)
     pub tile_size: U32<LE>,
@@ -341,6 +346,27 @@ impl GraphTileHeader {
     #[inline]
     pub const fn edge_bins_count(&self) -> usize {
         self.bin_offsets[BIN_COUNT - 1].get() as usize
+    }
+
+    /// Gets the start and end offset for the given bin index.
+    /// This offset can be used to index into the array of edge IDs in the `GraphTile` struct.
+    ///
+    /// The returned tuple is in `(start, end)` order.
+    /// The end index is "one past the end" (the start of the next bin).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bin index is illegal (25 or greater).
+    #[inline]
+    pub const fn edge_bin_offsets(&self, bin_index: usize) -> (usize, usize) {
+        assert!(bin_index < BIN_COUNT, "Invalid bin index");
+        let start = if bin_index == 0 {
+            0usize
+        } else {
+            self.bin_offsets[bin_index - 1].get() as usize
+        };
+        let end = self.bin_offsets[bin_index].get() as usize;
+        (start, end)
     }
 
     /// The size (in bytes) occupied by the complex forward restrictions.

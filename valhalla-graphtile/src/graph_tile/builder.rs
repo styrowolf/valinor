@@ -152,7 +152,7 @@ impl<'a> From<&'a OwnedGraphTileHandle> for GraphTileBuilder<'a> {
             signs: Cow::Borrowed(signs),
             turn_lanes: Cow::Borrowed(turn_lanes),
             admins: Cow::Borrowed(admins),
-            edge_bins: Cow::Borrowed(edge_bins.as_slice()),
+            edge_bins: Cow::Borrowed(edge_bins),
             complex_forward_restrictions_memory: Cow::Borrowed(complex_forward_restrictions_memory),
             complex_reverse_restrictions_memory: Cow::Borrowed(complex_reverse_restrictions_memory),
             edge_info_memory: Cow::Borrowed(edge_info_memory),

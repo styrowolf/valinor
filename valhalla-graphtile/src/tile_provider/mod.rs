@@ -1,3 +1,9 @@
+//! # Graph tile providers
+//!
+//! This module contains implementations for several graph tile providers.
+//! Note that there is currently no single generic trait for accessing tiles,
+//! due to the fundamental difference in how memory maps work vs file systems.
+
 use crate::GraphId;
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -126,4 +132,3 @@ impl<K: std::hash::Hash + Eq + Clone> LockTable<K> {
             .clone()
     }
 }
-

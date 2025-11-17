@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use thiserror::Error;
 use zerocopy::{LE, U64};
-use zerocopy_derive::{Immutable, IntoBytes, Unaligned};
+use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
 
 /// The max valid hierarchy level.
 ///
@@ -69,7 +69,9 @@ pub enum InvalidGraphIdError {
 ///
 /// Note that there are only 46 used bits in the scheme (ask Valhalla's authors why 46).
 #[repr(C)]
-#[derive(IntoBytes, Immutable, Unaligned, Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(
+    IntoBytes, Immutable, Unaligned, FromBytes, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd,
+)]
 pub struct GraphId(U64<LE>);
 
 impl GraphId {

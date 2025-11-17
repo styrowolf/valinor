@@ -61,13 +61,13 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
     /// # Errors
     ///
     /// Fails if the edge doesn't exist in the traffic tile.
-    pub async unsafe fn get_speeds_for_edge(
+    pub unsafe fn get_speeds_for_edge(
         &self,
         graph_id: GraphId,
     ) -> Result<TrafficSpeed, GraphTileProviderError> {
         // SAFETY: Assumes the header is present and valid,
         // by assuming we are the only writer process.
-        let speed_pointer = unsafe { self.get_pointer_for_edge(graph_id).await? };
+        let speed_pointer = unsafe { self.get_pointer_for_edge(graph_id)? };
 
         // SAFETY: Assumes the count in the tile header is correct (see above assumptions).
         // If the header reports a higher than directed edge count, this could read out of bounds.
@@ -87,17 +87,14 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
     ///
     /// Assumes that the header is present and valid.
     /// It is the responsibility of the caller to ensure this.
-    async unsafe fn get_pointer_for_edge(
+    unsafe fn get_pointer_for_edge(
         &self,
         graph_id: GraphId,
     ) -> Result<MmapTilePointer, GraphTileProviderError> {
         const HEADER_SIZE: usize = size_of::<TrafficTileHeader>();
         const SPEED_SIZE: usize = size_of::<TrafficSpeed>();
 
-        let tile_pointer = self
-            .tarball_tile_provider
-            .get_tile_containing(graph_id)
-            .await?;
+        let tile_pointer = self.tarball_tile_provider.get_tile_containing(graph_id)?;
         let header_pointer = MmapTilePointer {
             mmap: tile_pointer.mmap.clone(),
             offsets: TileOffset {
@@ -198,14 +195,14 @@ impl TrafficTileProvider<true> {
     /// # Errors
     ///
     /// Fails if the edge doesn't exist in the traffic tile.
-    pub async unsafe fn update_speed_for_edge(
+    pub unsafe fn update_speed_for_edge(
         &self,
         graph_id: GraphId,
         speed: TrafficSpeed,
     ) -> Result<(), GraphTileProviderError> {
         // SAFETY: Assumes the header is present and valid,
         // by assuming we are the only writer process.
-        let speed_pointer = unsafe { self.get_pointer_for_edge(graph_id).await? };
+        let speed_pointer = unsafe { self.get_pointer_for_edge(graph_id)? };
 
         // SAFETY: Assumes the count in the tile header is correct (see above assumptions).
         // If the header reports a higher than directed edge count, this could read out of bounds.
@@ -222,8 +219,8 @@ mod tests {
     use crate::traffic_tile::TrafficSpeed;
     use std::path::PathBuf;
 
-    #[tokio::test]
-    async fn test_get_speed() {
+    #[test]
+    fn test_get_speed() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-traffic.tar");
@@ -235,7 +232,6 @@ mod tests {
         let edge_speed = unsafe {
             provider
                 .get_speeds_for_edge(graph_id)
-                .await
                 .expect("Unable to get tile")
         };
 
@@ -247,21 +243,21 @@ mod tests {
         let edge_speed = unsafe {
             provider
                 .get_speeds_for_edge(graph_id)
-                .await
                 .expect("Unable to get speed")
         };
 
         assert_eq!(edge_speed.overall_speed(), Some(32));
     }
 
-    #[tokio::test]
-    async fn test_set_speed() {
+    #[test]
+    fn test_set_speed() {
         const DESIRED_SPEED: u8 = 32;
 
         let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-traffic.tar");
 
+        // let tmp_path = PathBuf::from("/Users/ianthetechie/valhalla-docker/valhalla/traffic.tar");
         let tmp_dir = option_env!("RUNNER_TEMP").unwrap_or("/tmp");
         let tmp_path = PathBuf::from(tmp_dir).join("traffic-test-set-speed.tar");
         std::fs::copy(fixture_path, &tmp_path).expect("Failed to copy");
@@ -272,7 +268,6 @@ mod tests {
         let edge_speed = unsafe {
             provider
                 .get_speeds_for_edge(graph_id)
-                .await
                 .expect("Unable to get speed")
         };
 
@@ -285,14 +280,12 @@ mod tests {
         unsafe {
             provider
                 .update_speed_for_edge(graph_id, TrafficSpeed::single_speed(DESIRED_SPEED).unwrap())
-                .await
                 .expect("Failed to set speed for edge");
         }
 
         let edge_speed = unsafe {
             provider
                 .get_speeds_for_edge(graph_id)
-                .await
                 .expect("Unable to get speed")
         };
         assert!(edge_speed.has_valid_speed());
