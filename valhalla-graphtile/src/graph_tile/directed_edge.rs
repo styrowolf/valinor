@@ -7,9 +7,6 @@ use std::fmt::{Debug, Formatter};
 use zerocopy::{LE, U16, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
 
-#[cfg(feature = "openlr")]
-use openlr::Fow;
-
 #[bitfield(u64,
     repr = U64<LE>,
     from = bit_twiddling_helpers::conv_u64le::from_inner,
@@ -463,7 +460,6 @@ impl DirectedEdge {
     pub const fn length(&self) -> u32 {
         self.fifth_bitfield.length().get()
     }
-
 }
 
 // The bitfield struct macros break serde field attributes, so we roll our own for now.

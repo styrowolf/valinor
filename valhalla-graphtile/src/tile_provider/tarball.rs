@@ -1,9 +1,9 @@
-use super::GraphTileProviderError;
+use super::{GraphTileProvider, GraphTileProviderError, bbox_with_center};
 use crate::GraphId;
-use crate::graph_tile::{GraphTile, GraphTileView, MmapTilePointer, TileOffset};
+use crate::graph_tile::{GraphTileView, MmapTilePointer, TileOffset};
+use geo::Point;
 use memmap2::{MmapOptions, MmapRaw};
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -13,10 +13,6 @@ use zerocopy::{FromBytes, LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
 
 use crate::tile_hierarchy::STANDARD_LEVELS;
-
-use geo::{
-    Closest, Destination, Distance, Haversine, Point, algorithm::closest_point::ClosestPoint,
-};
 
 /// A tile provider backed by a memory-mapped tarball archive.
 ///
@@ -135,22 +131,23 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, GraphTileProviderError> {
         Self::init(path)
     }
+}
 
-    /// Enumerate base tile Graph IDs across all hierarchy levels that intersect a circle around
-    /// `center` with radius `radius`.
-    ///
-    /// Assumes that `center` is a valid geographic coordinate (lat+lon).
-    /// `radius` is specified in meters.
-    pub fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId> {
+impl<const MUT: bool> GraphTileProvider for TarballTileProvider<MUT> {
+    fn with_tile<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    where
+        F: FnOnce(&GraphTileView) -> T,
+    {
+        let tile_pointer = self.get_pointer_for_tile_containing(graph_id)?;
+        let tile_bytes = unsafe { tile_pointer.as_tile_bytes() };
+        let tile = GraphTileView::try_from(tile_bytes)?;
+        Ok(process(&tile))
+    }
+
+    fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId> {
         let mut out: Vec<GraphId> = Vec::new();
 
-        // Per https://github.com/georust/geo/pull/1091/,
-        // the longitude values should be normalized to [-180, 180].
-        // We assert this again in a unit test below.
-        let north = Haversine.destination(center, 0.0, radius).y();
-        let east = Haversine.destination(center, 90.0, radius).x();
-        let south = Haversine.destination(center, 180.0, radius).y();
-        let west = Haversine.destination(center, 270.0, radius).x();
+        let (north, east, south, west) = bbox_with_center(center, radius);
 
         for level in STANDARD_LEVELS.iter() {
             for gid in level.tiles_intersecting_bbox(north, east, south, west) {
@@ -164,9 +161,8 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
     }
 }
 
-// This can't currently implement the existing trait because it operates on unowned data.
 impl<const MUT: bool> TarballTileProvider<MUT> {
-    pub fn get_tile_containing(
+    pub fn get_pointer_for_tile_containing(
         &self,
         graph_id: GraphId,
     ) -> Result<MmapTilePointer, GraphTileProviderError> {
@@ -304,8 +300,7 @@ pub fn parse_index_bin(index_bytes: &[u8]) -> Result<&[TileIndexBinEntry], Graph
 mod test {
     use super::*;
     use crate::graph_tile::{GraphTile, GraphTileView};
-    use crate::tile_provider::{DirectoryGraphTileProvider, GraphTileProvider};
-    use geo::point;
+    use crate::tile_provider::{DirectoryGraphTileProvider, OwnedGraphTileProvider};
     use std::num::NonZeroUsize;
     use std::path::PathBuf;
 
@@ -380,8 +375,8 @@ mod test {
     }
 
     #[cfg(not(miri))]
-    #[tokio::test]
-    async fn test_get_tile() {
+    #[test]
+    fn test_get_tile() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("fixtures")
             .join("andorra-tiles.tar");
@@ -389,7 +384,7 @@ mod test {
             TarballTileProvider::new(path).expect("Unable to init tile provider");
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
         let tile_pointer = provider
-            .get_tile_containing(graph_id)
+            .get_pointer_for_tile_containing(graph_id)
             .expect("Unable to get tile");
         let tile_bytes = unsafe { tile_pointer.as_tile_bytes() };
         let tile = GraphTileView::try_from(tile_bytes).expect("Unable to deserialize tile");
@@ -399,39 +394,9 @@ mod test {
         assert_eq!(tile.header().graph_id().value(), graph_id.value());
     }
 
-    // #[cfg(not(miri))]
-    // #[test]
-    // fn test_get_opp_edge() {
-    //     let mut rng = rng();
-    //
-    //     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    //         .join("fixtures")
-    //         .join("andorra-tiles.tar");
-    //     let provider = TarballTileProvider::new(path).expect("Unable to init tile provider");
-    //     let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-    //     let tile_pointer = futures::executor::block_on(provider.get_tile_containing(graph_id))
-    //         .expect("Unable to get tile");
-    //     let tile_bytes = unsafe { tile_pointer.as_tile_bytes() };
-    //     let tile = GraphTileView::try_from(tile_bytes).expect("Unable to deserialize tile");
-    //
-    //     // Cross-check the default implementation of the opposing edge ID function.
-    //     // We only check a subset because it takes too long otherwise.
-    //     // See the performance note on get_opposing_edge.
-    //     let range = Uniform::try_from(0..u64::from(tile.header().directed_edge_count())).unwrap();
-    //     for index in range.sample_iter(&mut rng).take(100) {
-    //         let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
-    //         let opp_edge_index = tile
-    //             .get_opp_edge_index(edge_id)
-    //             .expect("Unable to get opp edge index.");
-    //         let (opp_edge_id, _) = futures::executor::block_on(provider.get_opposing_edge(edge_id))
-    //             .expect("Unable to get opposing edge.");
-    //         assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
-    //     }
-    // }
-
     #[cfg(not(miri))]
-    #[tokio::test]
-    async fn test_tiles_are_identical_to_directory() {
+    #[test]
+    fn test_tiles_are_identical_to_directory() {
         // This test uses the directory tile provider as an oracle
         // to make sure the tarball reader is working as expected.
         // Probably goes without saying, but the tarball was created using
@@ -461,28 +426,14 @@ mod test {
 
         for graph_id in tile_ids {
             let directory_tile = directory_provider
-                .get_tile_containing(*graph_id)
-                .await
+                .get_handle_for_tile_containing(*graph_id)
                 .expect("Unable to get tile");
             let tarball_tile_pointer = tarball_provider
-                .get_tile_containing(*graph_id)
+                .get_pointer_for_tile_containing(*graph_id)
                 .expect("Unable to get tile");
             let tarball_tile_bytes = unsafe { tarball_tile_pointer.as_tile_bytes() };
 
             assert_eq!(directory_tile.borrow_owner(), tarball_tile_bytes);
         }
-    }
-
-    #[test]
-    fn haversine_antimeridian_wraps() {
-        // Wrapping from east -> west
-        let projected = Haversine.destination(point!(x: 179.9, y: 0.0), 90.0, 50_000.0);
-        assert!(projected.x() < -179.0);
-        assert!(projected.x() > -180.0);
-
-        // Wrapping the other way
-        let projected = Haversine.destination(point!(x: -179.9, y: 0.0), 270.0, 50_000.0);
-        assert!(projected.x() > 179.0);
-        assert!(projected.x() < 180.0);
     }
 }

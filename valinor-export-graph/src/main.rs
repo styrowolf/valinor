@@ -1,4 +1,4 @@
-use crate::models::{EdgePointer, EdgeRecord};
+use crate::models::EdgeRecord;
 use bit_set::BitSet;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -18,7 +18,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError, OwnedGraphTileHandle};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
-    DirectoryGraphTileProvider, GraphTileProvider, GraphTileProviderError,
+    DirectoryGraphTileProvider, GraphTileProvider, GraphTileProviderError, OwnedGraphTileProvider,
 };
 use valhalla_graphtile::{GraphId, RoadUse};
 use zstd::Encoder;
@@ -128,12 +128,7 @@ fn main() -> anyhow::Result<()> {
             progress_bar.as_ref().inspect(|bar| bar.inc(1));
             // Get the index pointer for each tile in the level
             let graph_id = GraphId::try_from_components(level.level, u64::from(tile_id), 0)?;
-            // We use a thread local executor for simplicity here rather than full tokio.
-            // This is essentially a synchronous program
-            // built on rayon for CPU parallelism.
-            // There should not be much waiting for file I/O,
-            // and all the blocking is naturally fine as these are on a thread pool.
-            match futures::executor::block_on(reader.get_tile_containing(graph_id)) {
+            match reader.get_handle_for_tile_containing(graph_id) {
                 Ok(tile) => {
                     let tile_edge_count = tile.header().directed_edge_count() as usize;
                     tile_set.insert(graph_id, edge_count);
@@ -183,7 +178,7 @@ fn main() -> anyhow::Result<()> {
             let reader =
                 DirectoryGraphTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
 
-            let tile = futures::executor::block_on(reader.get_tile_containing(*tile_id))?;
+            let tile = reader.get_handle_for_tile_containing(*tile_id)?;
 
             // Create a base writer to either stdout or a file with appropriate extension
             let base: Box<dyn Write> = if write_to_stdout {
@@ -253,7 +248,7 @@ fn export_edges_for_tile<W: Write>(
     should_skip_edge: &impl Fn(&DirectedEdge, &Vec<Cow<str>>) -> bool,
 ) -> anyhow::Result<()> {
     for index in 0..tile.header().directed_edge_count() as usize {
-        let mut pe = processed_edges.lock().unwrap();
+        let mut pe = processed_edges.lock().expect("Poisoned lock?");
         if pe.contains(edge_index_offset + index) {
             // Skip edges we've already processed
             continue;
@@ -278,35 +273,19 @@ fn export_edges_for_tile<W: Write>(
         }
 
         // Get the opposing edge
-        let opposing_edge = match tile.get_opp_edge_index(edge_id) {
-            Ok(opp_edge_id) => {
-                let opp_graph_id = edge_id.with_index(opp_edge_id as u64)?;
-                EdgePointer {
-                    graph_id: opp_graph_id,
-                    tile: tile.clone(),
-                }
-            }
+        let opposing_edge_id = match tile.get_opp_edge_index(edge_id) {
+            Ok(opp_edge_id) => edge_id.with_index(opp_edge_id as u64)?,
             Err(LookupError::InvalidIndex) => {
                 return Err(LookupError::InvalidIndex)?;
             }
-            Err(LookupError::MismatchedBase) => {
-                let (opp_graph_id, tile) =
-                    futures::executor::block_on(reader.get_opposing_edge(edge_id))?;
-                EdgePointer {
-                    graph_id: opp_graph_id,
-                    tile,
-                }
-            }
+            Err(LookupError::MismatchedBase) => reader.get_opposing_edge(edge_id)?,
         };
         progress_bar.as_ref().inspect(|bar| bar.inc(1));
-        if let Some(offset) = tile_set.get(&opposing_edge.graph_id.tile_base_id()) {
-            pe.insert(offset + opposing_edge.graph_id.index() as usize);
+        if let Some(offset) = tile_set.get(&opposing_edge_id.tile_base_id()) {
+            pe.insert(offset + opposing_edge_id.index() as usize);
         } else {
             // This happens in extracts, but shouldn't for the planet...
-            warn!(
-                "Missing opposite edge {} in tile set",
-                opposing_edge.graph_id
-            );
+            warn!("Missing opposite edge {} in tile set", opposing_edge_id);
         }
 
         drop(pe); // Release the lock

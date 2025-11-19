@@ -14,9 +14,6 @@ use zerocopy_derive::TryFromBytes;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "openlr")]
-use openlr::Frc;
-
 // Pub use for re-export without too many levels of hierarchy.
 // The implementations are sufficiently complex that we want to have lots of files,
 // But many of those only have one or two useful definitions to re-export,
@@ -69,22 +66,6 @@ impl RoadClass {
         // then the discriminant may be reliably accessed via unsafe pointer casting.
         // https://doc.rust-lang.org/reference/items/enumerations.html#pointer-casting
         unsafe { *std::ptr::from_ref::<Self>(self).cast::<u8>() }
-    }
-}
-
-#[cfg(feature = "openlr")]
-impl From<RoadClass> for Frc {
-    fn from(value: RoadClass) -> Self {
-        match value {
-            RoadClass::Motorway => Frc::Frc0,
-            RoadClass::Trunk => Frc::Frc1,
-            RoadClass::Primary => Frc::Frc2,
-            RoadClass::Secondary => Frc::Frc3,
-            RoadClass::Tertiary => Frc::Frc4,
-            RoadClass::Unclassified => Frc::Frc5,
-            RoadClass::Residential => Frc::Frc6,
-            RoadClass::ServiceOther => Frc::Frc7,
-        }
     }
 }
 

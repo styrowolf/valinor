@@ -1,23 +1,8 @@
 use geo::LineString;
 use serde::Serialize;
-use std::sync::Arc;
-use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo, GraphTile, OwnedGraphTileHandle};
+use valhalla_graphtile::RoadClass;
+use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo};
 use valhalla_graphtile::tile_hierarchy::TileLevel;
-use valhalla_graphtile::{GraphId, RoadClass};
-
-// TODO: Do we need this?
-pub struct EdgePointer {
-    pub graph_id: GraphId,
-    pub tile: Arc<OwnedGraphTileHandle>,
-}
-
-impl EdgePointer {
-    pub(crate) fn edge(&self) -> &DirectedEdge {
-        self.tile
-            .get_directed_edge(self.graph_id)
-            .expect("That wasn't supposed to happen...")
-    }
-}
 
 #[derive(Serialize)]
 struct Tippecanoe {

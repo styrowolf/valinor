@@ -94,7 +94,9 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
         const HEADER_SIZE: usize = size_of::<TrafficTileHeader>();
         const SPEED_SIZE: usize = size_of::<TrafficSpeed>();
 
-        let tile_pointer = self.tarball_tile_provider.get_tile_containing(graph_id)?;
+        let tile_pointer = self
+            .tarball_tile_provider
+            .get_pointer_for_tile_containing(graph_id)?;
         let header_pointer = MmapTilePointer {
             mmap: tile_pointer.mmap.clone(),
             offsets: TileOffset {

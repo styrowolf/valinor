@@ -1,18 +1,18 @@
 use crate::GraphId;
 use crate::graph_id::InvalidGraphIdError;
-use crate::graph_tile::OwnedGraphTileHandle;
 use crate::graph_tile::{GraphTileBuildError, GraphTileBuilder};
-use crate::tile_provider::{GraphTileProvider, GraphTileProviderError, LockTable};
-use async_trait::async_trait;
+use crate::graph_tile::{GraphTileView, OwnedGraphTileHandle};
+use crate::tile_hierarchy::STANDARD_LEVELS;
+use crate::tile_provider::{
+    GraphTileProvider, GraphTileProviderError, LockTable, OwnedGraphTileProvider, bbox_with_center,
+};
+use geo::Point;
 use lru::LruCache;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tokio::{
-    fs::File,
-    io::{AsyncWriteExt, BufWriter},
-};
+use std::{fs::File, io::BufWriter};
 
 /// A graph tile provider that is backed by a directory of tiles.
 ///
@@ -85,30 +85,30 @@ impl DirectoryGraphTileProvider {
     /// - Writing the temporary file fails
     /// - The atomic file rename fails
     /// - The internal tile cache lock is corrupted (this should never happen; if it does, it's an error in Valinor)
-    pub async fn overwrite_tile(
+    pub fn overwrite_tile(
         &self,
         graph_tile_builder: GraphTileBuilder<'_>,
     ) -> Result<(), GraphTileBuildError> {
         let graph_id = graph_tile_builder.graph_id();
 
         let lock = self.lock_table.lock_for(graph_id);
-        let _guard = lock.lock().await;
+        let _guard = lock.lock();
 
         let path = self.path_for_graph_id(graph_id)?;
 
         // Write to a temp file
         let tmp_path = path.with_extension(".tmp");
-        let file = File::create(&tmp_path).await?;
+        let file = File::create(&tmp_path)?;
         let mut writer = BufWriter::new(file);
 
         for section in graph_tile_builder.into_byte_iter()? {
-            writer.write_all(&section).await?;
+            writer.write_all(&section)?;
         }
 
-        writer.flush().await?;
+        writer.flush()?;
 
         // Replace the original file atomically
-        tokio::fs::rename(tmp_path, path).await?;
+        std::fs::rename(tmp_path, path)?;
 
         let mut cache = self
             .lru_cache
@@ -128,14 +128,39 @@ impl DirectoryGraphTileProvider {
     }
 }
 
-#[async_trait]
 impl GraphTileProvider for DirectoryGraphTileProvider {
-    async fn get_tile_containing(
+    fn with_tile<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    where
+        F: FnOnce(&GraphTileView) -> T,
+    {
+        let tile = self.get_handle_for_tile_containing(graph_id)?;
+        Ok(process(tile.borrow_dependent()))
+    }
+
+    fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId> {
+        let mut out: Vec<GraphId> = Vec::new();
+
+        let (north, east, south, west) = bbox_with_center(center, radius);
+
+        for level in STANDARD_LEVELS.iter() {
+            for gid in level.tiles_intersecting_bbox(north, east, south, west) {
+                if self.get_handle_for_tile_containing(gid).is_ok() {
+                    out.push(gid);
+                }
+            }
+        }
+
+        out
+    }
+}
+
+impl OwnedGraphTileProvider for DirectoryGraphTileProvider {
+    fn get_handle_for_tile_containing(
         &self,
         graph_id: GraphId,
     ) -> Result<Arc<OwnedGraphTileHandle>, GraphTileProviderError> {
         let lock = self.lock_table.lock_for(graph_id);
-        let _guard = lock.lock().await;
+        let _guard = lock.lock();
 
         // Build up the path from the base directory + tile ID components
         // TODO: Do we want to move the base ID check inside file_path?
@@ -149,8 +174,6 @@ impl GraphTileProvider for DirectoryGraphTileProvider {
                 let path = self.path_for_graph_id(base_graph_id)?;
                 // Open the file and read all bytes into a buffer
                 // NOTE: Does not handle compressed tiles
-                // FIXME: We should probably use tokio::fs::read here, but this closure is not async.
-                // I'm also not sure how deep we want the tokio dependencies to go... it's complicated.
                 let data = std::fs::read(path).map_err(|e| match e.kind() {
                     ErrorKind::NotFound => GraphTileProviderError::TileDoesNotExist,
                     _ => GraphTileProviderError::IoError(e),
@@ -171,20 +194,13 @@ mod test {
     use crate::GraphId;
     use crate::graph_tile::GraphTile;
     use crate::tile_hierarchy::STANDARD_LEVELS;
-    use crate::tile_provider::GraphTileProvider;
+    use crate::tile_provider::{GraphTileProvider, OwnedGraphTileProvider};
     use core::num::NonZeroUsize;
     use rand::{
         distr::{Distribution, Uniform},
         rng,
     };
     use std::path::PathBuf;
-    // NOTE: In most projects, these tests would be written with #[tokio::test] for simplicity.
-    // We avoid that in our tests to enable greater compatibility under Miri.
-    // Miri support for syscalls on non-Linux platforms, even Tier 1 ones, is limited.
-    // Tokio uses kqueue on macOS (and presumably FreeBSD) internally,
-    // which is not implemented in miri.
-    // Our use case does not require any sort of work stealing or complex dependencies,
-    // so we use the blocking executor directly to drive futures to completion.
 
     #[test]
     fn test_get_tile() {
@@ -193,7 +209,8 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = futures::executor::block_on(provider.get_tile_containing(graph_id))
+        let tile = provider
+            .get_handle_for_tile_containing(graph_id)
             .expect("Unable to get tile");
 
         // Minimally test that we got the correct tile
@@ -210,7 +227,8 @@ mod test {
             .join("andorra-tiles");
         let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(1).unwrap());
         let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
-        let tile = futures::executor::block_on(provider.get_tile_containing(graph_id))
+        let tile = provider
+            .get_handle_for_tile_containing(graph_id)
             .expect("Unable to get tile");
 
         // Cross-check the default implementation of the opposing edge ID function.
@@ -222,7 +240,8 @@ mod test {
             let opp_edge_index = tile
                 .get_opp_edge_index(edge_id)
                 .expect("Unable to get opp edge index.");
-            let (opp_edge_id, _) = futures::executor::block_on(provider.get_opposing_edge(edge_id))
+            let opp_edge_id = provider
+                .get_opposing_edge(edge_id)
                 .expect("Unable to get opposing edge.");
             assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
         }
@@ -246,7 +265,8 @@ mod test {
 
         for graph_id in graph_ids {
             let level = graph_id.level();
-            let tile = futures::executor::block_on(provider.get_tile_containing(graph_id))
+            let tile = provider
+                .get_handle_for_tile_containing(graph_id)
                 .expect("Unable to get tile");
 
             // Minimally test that we got the correct tile
