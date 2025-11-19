@@ -85,9 +85,7 @@ fn main() -> anyhow::Result<()> {
     let write_to_stdout = cli.write_to_stdout();
 
     let should_skip_edge = |edge: &DirectedEdge, names: &Vec<Cow<str>>| {
-        // TODO: Actually, visualizing the shortcuts as a separate layer COULD be quite interesting!
         (cli.skip_transit && edge.is_transit_line())
-            || edge.is_shortcut()
             || (cli.skip_ferries && edge.edge_use() == RoadUse::Ferry)
             || (cli.skip_unnamed && names.is_empty())
     };

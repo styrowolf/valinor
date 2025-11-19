@@ -1,6 +1,6 @@
 ---
 source: valhalla-graphtile/src/graph_tile/directed_edge.rs
-expression: tile.directed_edges.last().unwrap()
+expression: tile.directed_edges().last().unwrap()
 ---
 DirectedEdge {
     first_bitfield: FirstBitfield {
@@ -11,7 +11,7 @@ DirectedEdge {
         opposing_edge_index: U32(
             0,
         ),
-        forward: 1,
+        forward_edge_info: 1,
         leaves_tile: 0,
         country_crossing: 0,
     },

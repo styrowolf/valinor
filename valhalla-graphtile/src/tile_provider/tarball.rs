@@ -141,11 +141,7 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
     ///
     /// Assumes that `center` is a valid geographic coordinate (lat+lon).
     /// `radius` is specified in meters.
-    pub fn enumerate_tiles_within_radius(
-        &self,
-        center: Point,
-        radius: f64,
-    ) -> Vec<GraphId> {
+    pub fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId> {
         let mut out: Vec<GraphId> = Vec::new();
 
         // Per https://github.com/georust/geo/pull/1091/,

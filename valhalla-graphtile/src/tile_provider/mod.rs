@@ -41,6 +41,8 @@ pub enum GraphTileProviderError {
     PoisonedCacheLock(String),
     #[error("Invalid tarball: {0}")]
     InvalidTarball(String),
+    #[error("Unsupported tile version; this may or may not be compatible.")]
+    UnsupportedTileVersion,
 }
 
 #[async_trait]

@@ -3,11 +3,10 @@ use crate::{
 };
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use geo::LineString;
+use geo::Coord;
 use std::borrow::Cow;
-use std::cell::OnceCell;
-use zerocopy::{FromBytes, LE, U16, U32, transmute};
-use zerocopy_derive::{FromBytes, Immutable, Unaligned};
+use zerocopy::{FromBytes, LE, U16, U32};
+use zerocopy_derive::{FromBytes, Immutable, KnownLayout, Unaligned};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer, ser::SerializeStruct};
@@ -42,7 +41,7 @@ pub struct NameInfo {
     from = bit_twiddling_helpers::conv_u32le::from_inner,
     into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
-#[derive(FromBytes, Immutable, Unaligned)]
+#[derive(FromBytes, Immutable, Unaligned, KnownLayout)]
 struct FirstInnerBitfield {
     #[bits(12, from = bit_twiddling_helpers::conv_u16le::from_inner, into = bit_twiddling_helpers::conv_u16le::into_inner)]
     mean_elevation: U16<LE>,
@@ -59,7 +58,7 @@ struct FirstInnerBitfield {
     from = bit_twiddling_helpers::conv_u32le::from_inner,
     into = bit_twiddling_helpers::conv_u32le::into_inner
 )]
-#[derive(FromBytes, Immutable, Unaligned)]
+#[derive(FromBytes, Immutable, Unaligned, KnownLayout)]
 struct SecondInnerBitfield {
     #[bits(4)]
     name_count: u8,
@@ -75,7 +74,7 @@ struct SecondInnerBitfield {
     _spare: u8,
 }
 
-#[derive(Debug, FromBytes, Immutable, Unaligned)]
+#[derive(Debug, FromBytes, Immutable, Unaligned, KnownLayout)]
 #[repr(C)]
 struct EdgeInfoInner {
     // The first part of the OSM way ID
@@ -85,16 +84,26 @@ struct EdgeInfoInner {
     second_inner_bitfield: SecondInnerBitfield,
 }
 
+/// Edge information that isn't required during path finding.
+///
+/// This includes things like road names, the OSM way ID, and geometry
+/// which would be a waste of space in the [`DirectedEdge`](super::DirectedEdge).
+///
+/// The directed edge graph always has an opposing edge to aid in graph traversal,
+/// and the access conditions and other attributes of these are not always the same.
+/// However, the edge info _is_ always the same, so it's only stored once per directed edge pair.
+///
+/// Because of this, some properties (like the shape) depend on which direction we're going.
+/// This is captured in [`DirectedEdge::edge_info_is_forward`](super::DirectedEdge::edge_info_is_forward).
 #[derive(Debug)]
 pub struct EdgeInfo<'a> {
-    inner: EdgeInfoInner,
+    inner: &'a EdgeInfoInner,
     name_info_list: &'a [NameInfo],
     /// The raw varint-encoded shape bytes.
     pub encoded_shape: &'a [u8],
     // Last 2 bytes of the 64-bit way ID
     extended_way_id_2: u8,
     extended_way_id_3: u8,
-    decoded_shape: OnceCell<LineString<f64>>,
     // TODO: Encoded elevation (pointer?)
     text_list_memory: &'a [u8],
     // TODO: Tag cache
@@ -107,7 +116,19 @@ impl EdgeInfo<'_> {
         self.inner.first_inner_bitfield.speed_limit()
     }
 
-    /// Gets the shape of the edge geometry as a [`LineString`].
+    /// Decodes the geometry for an edge pair.
+    ///
+    /// # Directionality
+    ///
+    /// Edges exist in both forward and backward variants in the directed graph,
+    /// If your use case depends on the coordinates being in a particular order
+    /// (e.g. generating a full-route step profile / polyline),
+    /// you may need to reverse the result.
+    ///
+    /// This method always returns the "raw" (forward) coordinate order.
+    /// If [`DirectedEdge::edge_info_is_forward`] is `false`,
+    /// then you need to reverse the result if your use is order-dependent.
+    ///
     ///
     /// # Errors
     ///
@@ -115,18 +136,10 @@ impl EdgeInfo<'_> {
     ///
     /// # Performance
     ///
-    /// If this [`EdgeInfo`] geometry has not been accessed previously,
-    /// then it will be decoded during this method call.
-    /// Subsequent fetches will be cached for as long as the `EdgeInfo`
-    /// is live.
-    pub fn shape(&self) -> std::io::Result<&LineString<f64>> {
-        // TODO: Use https://doc.rust-lang.org/core/cell/struct.OnceCell.html#method.get_or_try_init when stabilized
-        if let Some(linestring) = self.decoded_shape.get() {
-            Ok(linestring)
-        } else {
-            let shape = decode_shape(self.encoded_shape)?;
-            Ok(self.decoded_shape.get_or_init(|| shape))
-        }
+    /// This requires decoding the shape from its packed representation (varint).
+    /// If expect to reuse geometries many times, you may want to cache the decoded geometries.
+    pub fn decode_raw_shape(&self) -> std::io::Result<Vec<Coord>> {
+        decode_shape(self.encoded_shape)
     }
 
     // TODO: Other filters (tagged and linguistic filters)
@@ -176,12 +189,15 @@ impl<'a> TryFrom<(&'a [u8], &'a [u8])> for EdgeInfo<'a> {
     type Error = GraphTileDecodingError;
 
     fn try_from((bytes, text_list_memory): (&'a [u8], &'a [u8])) -> Result<Self, Self::Error> {
-        const INNER_SIZE: usize = size_of::<EdgeInfoInner>();
-        let inner_slice: [u8; INNER_SIZE] = (bytes[0..INNER_SIZE]).try_into()?;
-        let inner: EdgeInfoInner = transmute!(inner_slice);
+        let (inner, bytes) = EdgeInfoInner::ref_from_prefix(bytes).map_err(|e| {
+            GraphTileDecodingError::CastError {
+                field: "inner".to_string(),
+                error_description: e.to_string(),
+            }
+        })?;
 
         let (name_info_list, bytes) = <[NameInfo]>::ref_from_prefix_with_elems(
-            &bytes[INNER_SIZE..],
+            bytes,
             inner.second_inner_bitfield.name_count() as usize,
         )
         .map_err(|e| GraphTileDecodingError::CastError {
@@ -219,7 +235,6 @@ impl<'a> TryFrom<(&'a [u8], &'a [u8])> for EdgeInfo<'a> {
             encoded_shape,
             extended_way_id_2,
             extended_way_id_3,
-            decoded_shape: OnceCell::new(),
             text_list_memory,
         })
     }

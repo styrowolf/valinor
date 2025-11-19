@@ -26,7 +26,7 @@ struct FirstBitfield {
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
-    forward: u8,
+    forward_edge_info: u8,
     #[bits(1)]
     leaves_tile: u8,
     #[bits(1)]
@@ -267,8 +267,6 @@ impl DirectedEdge {
     // TODO: Dozens of access helpers :)
 
     /// The end node ID for this directed edge.
-    ///
-    /// NOTE: The directed edge's graph ID is also the ID of its start node.
     #[inline]
     pub const fn end_node_id(&self) -> GraphId {
         // SAFETY: We know that the bit field cannot contain a value
@@ -290,6 +288,12 @@ impl DirectedEdge {
         self.seventh_bitfield.is_shortcut() != 0
     }
 
+    /// Does this edge end outside the current tile?
+    #[inline]
+    pub const fn leaves_tile(&self) -> bool {
+        self.first_bitfield.leaves_tile() != 0
+    }
+
     /// Gets the offset into the variable sized edge info field.
     #[inline]
     pub const fn edge_info_offset(&self) -> u32 {
@@ -298,10 +302,10 @@ impl DirectedEdge {
 
     /// Is the edge info forward or reverse?
     ///
-    /// TODO: Determine the practical implications of this
+    /// Refer to the [`EdgeInfo`](crate::graph_tile::EdgeInfo) docs for info on why this matters.
     #[inline]
-    pub const fn forward(&self) -> bool {
-        self.first_bitfield.forward() != 0
+    pub const fn edge_info_is_forward(&self) -> bool {
+        self.first_bitfield.forward_edge_info() != 0
     }
 
     /// Does the edge cross into a new country?
@@ -440,18 +444,14 @@ impl DirectedEdge {
         self.third_bitfield.set_has_predicted_speed(value.into());
     }
 
-    /// Gets the forward access modes.
-    ///
-    /// TODO: Determine the impact of [`self.forward`] on this
+    /// Gets the set of access modes allowed to traverse this edge forward.
     #[inline]
     pub fn forward_access(&self) -> EnumSet<Access> {
         // SAFETY: The access bits are length 12, so invalid representations are impossible.
         unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.forward_access().get()) }
     }
 
-    /// Gets the reverse access modes.
-    ///
-    /// TODO: Determine the impact of `forward` on this
+    /// Gets the set of access modes allowed to traverse this edge in reverse.
     #[inline]
     pub fn reverse_access(&self) -> EnumSet<Access> {
         // SAFETY: The access bits are length 12, so invalid representations are impossible.
@@ -480,7 +480,7 @@ impl Serialize for DirectedEdge {
 
         let mut state = serializer.serialize_struct("DirectedEdge", num_fields)?;
 
-        state.serialize_field("forward", &self.forward())?;
+        state.serialize_field("forward", &self.edge_info_is_forward())?;
         state.serialize_field("country_crossing", &self.country_crossing())?;
 
         state.serialize_field(

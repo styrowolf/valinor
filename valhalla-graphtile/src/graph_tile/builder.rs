@@ -138,7 +138,7 @@ impl<'a> From<&'a OwnedGraphTileHandle> for GraphTileBuilder<'a> {
             dataset_id: header.dataset_id.get(),
             sw_corner: header.sw_corner(),
             create_date: header.create_date(),
-            remove_me_header: header.clone(),
+            remove_me_header: (*header).clone(),
             nodes: Cow::Borrowed(nodes),
             transitions: Cow::Borrowed(transitions),
             directed_edges: Cow::Borrowed(directed_edges),

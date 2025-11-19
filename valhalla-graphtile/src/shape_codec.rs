@@ -6,7 +6,7 @@
 //! See Google's [protobuf docs](https://protobuf.dev/programming-guides/encoding/)
 //! for info on varint encoding generally.
 
-use geo::{Coord, LineString, coord};
+use geo::{Coord, coord};
 use integer_encoding::VarIntReader;
 
 const DECODE_PRECISION: f64 = 1e-6;
@@ -18,9 +18,9 @@ const DECODE_PRECISION: f64 = 1e-6;
 /// Decoding may fail if the byte buffer is not exactly sized
 /// (you cannot include extra information at the end of a slice).
 /// It will also fail if the varint data is malformed.
-pub fn decode_shape(bytes: &[u8]) -> std::io::Result<LineString<f64>> {
+pub fn decode_shape(bytes: &[u8]) -> std::io::Result<Vec<Coord>> {
     // Pre-allocating 1/4 the byte len is an optimization from Valhalla.
-    // Sounds about right since we can expect most values to be small due to delta encoding.
+    // This sounds about right since we can expect most values to be small due to delta encoding.
     let mut coords: Vec<Coord> = Vec::with_capacity(bytes.len() / 4);
     let mut lat = 0;
     let mut lon = 0;
@@ -33,5 +33,6 @@ pub fn decode_shape(bytes: &[u8]) -> std::io::Result<LineString<f64>> {
             y: f64::from(lat) * DECODE_PRECISION,
         });
     }
-    Ok(coords.into())
+
+    Ok(coords)
 }

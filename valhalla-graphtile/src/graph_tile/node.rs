@@ -185,12 +185,26 @@ impl NodeInfo {
     }
 
     /// The index within the node's tile of its first outbound directed edge.
+    ///
+    /// This can be combined with [`edge_count`](NodeInfo::edge_count)
+    /// to enumerate all outbound edges.
+    /// [`GraphTile::get_outbound_edges_from_node`](crate::graph_tile::GraphTile::get_outbound_edges_from_node)
+    /// provides a more convenient API for this use case.
     #[inline]
     pub const fn edge_index(&self) -> u32 {
         self.second_bit_field.edge_index().get()
     }
 
-    /// The number of outbound edges (on this level).
+    /// The number of outbound edges on the same level.
+    ///
+    /// This count _does_ include shortcuts and other non-road edges,
+    /// unlike [`local_edge_count`](NodeInfo::local_edge_count).
+    /// Transitions are recorded separately in [`self.transition_count`](NodeInfo::transition_count).
+    ///
+    /// This can be combined with [`edge_index`](NodeInfo::edge_index)
+    /// to enumerate all outbound edges.
+    /// [`GraphTile::get_outbound_edges_from_node`](crate::graph_tile::GraphTile::get_outbound_edges_from_node)
+    /// provides a more convenient API for this use case.
     #[inline]
     pub const fn edge_count(&self) -> u8 {
         self.second_bit_field.edge_count()
@@ -256,7 +270,7 @@ impl NodeInfo {
 
     /// The index of the first transition from this node.
     /// This index is into the `transitions` vector on
-    /// the graph tile..
+    /// the graph tile.
     #[inline]
     pub const fn transition_index(&self) -> u32 {
         self.third_bit_field.transition_index().get()
@@ -281,12 +295,24 @@ impl NodeInfo {
     //     self.third_bit_field.local_driveability()
     // }
 
-    /// The number of regular edges across all levels.
+    /// Some sort of edge count?
     ///
-    /// Does not include shortcut edges, transit edges, transit connections, and transition edges.
+    /// From the Valhalla docs:
+    ///
+    /// > Get the number of regular edges across all levels (up to
+    ///   kMaxLocalEdgeIndex+1). Does not include shortcut edges,
+    ///   transit edges and transit connections, and transition edges.
+    /// >
+    /// > `@return` Returns the number of edges on the local level.
+    ///
+    /// So [`edge_count`](NodeInfo::edge_count), this count does not include shortcut edges,
+    /// transit edges, transit connections, or transition edges.
+    /// But it's not really clear what "local" means without a deep dive into the code.
     #[inline]
     pub const fn local_edge_count(&self) -> u8 {
-        // Not sure that the +1 is for, but this is how I found it in nodeinfo.h
+        // Every edge _must_ have at least one outbound edge
+        // (there is _always_ an opposing edge in the Valhalla graph).
+        // To save bits (this field only has three), the zero value is used to indicate "1".
         self.third_bit_field.local_edge_count() + 1
     }
 

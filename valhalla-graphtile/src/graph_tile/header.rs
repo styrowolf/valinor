@@ -4,7 +4,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeDel
 use geo::{Coord, coord};
 use std::borrow::Cow;
 use zerocopy::{F32, LE, U16, U32, U64};
-use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
+use zerocopy_derive::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 mod builder;
 
@@ -165,7 +165,7 @@ struct MiscCountsBitFieldTwo {
 /// This contains metadata like version,
 /// number of nodes and edges,
 /// and pointer offsets to other data.
-#[derive(Clone, FromBytes, IntoBytes, Immutable, Unaligned, Debug, PartialEq)]
+#[derive(Clone, FromBytes, IntoBytes, Immutable, Unaligned, KnownLayout, Debug, PartialEq)]
 #[repr(C)]
 pub struct GraphTileHeader {
     bit_field_1: FirstBitfield,

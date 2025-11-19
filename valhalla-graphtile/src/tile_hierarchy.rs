@@ -98,7 +98,8 @@ impl TileLevel {
         if west > east {
             // Wrap across the antimeridian: [west, 180] ∪ [-180, east].
             self.tiles_intersecting_bbox(north, 180.0, south, west)
-                .into_iter().chain(self.tiles_intersecting_bbox(north, east, south, -180.0))
+                .into_iter()
+                .chain(self.tiles_intersecting_bbox(north, east, south, -180.0))
                 .collect()
         } else {
             // At this point we have a non-wrapping lon interval [w, e] with w <= e.
@@ -112,12 +113,15 @@ impl TileLevel {
             let max_y = (((north + 90.0) / size).floor() as i64).clamp(0, height - 1);
 
             // Iterate row-major: for each y, for each x, compute tile_index.
-            (min_y..=max_y).flat_map(move |y| {
-                (min_x..=max_x).map(move |x| {
-                    let tile_index = (y * width + x) as u64;
-                    GraphId::try_from_components(self.level, tile_index, 0).expect("valid base id")
+            (min_y..=max_y)
+                .flat_map(move |y| {
+                    (min_x..=max_x).map(move |x| {
+                        let tile_index = (y * width + x) as u64;
+                        GraphId::try_from_components(self.level, tile_index, 0)
+                            .expect("valid base id")
+                    })
                 })
-            }).collect()
+                .collect()
         }
     }
 }
@@ -317,16 +321,40 @@ mod tests {
     fn test_base_tile_id() {
         // Test the base_tile_id function
         let level = &STANDARD_LEVELS[0];
-        assert_eq!(base_tile_id(level, 0, 0), GraphId::try_from_components(0, 0, 0).unwrap());
-        assert_eq!(base_tile_id(level, 1, 0), GraphId::try_from_components(0, 1, 0).unwrap());
-        assert_eq!(base_tile_id(level, 0, 1), GraphId::try_from_components(0, 90, 0).unwrap());
-        assert_eq!(base_tile_id(level, 1, 1), GraphId::try_from_components(0, 91, 0).unwrap());
+        assert_eq!(
+            base_tile_id(level, 0, 0),
+            GraphId::try_from_components(0, 0, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 1, 0),
+            GraphId::try_from_components(0, 1, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 0, 1),
+            GraphId::try_from_components(0, 90, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 1, 1),
+            GraphId::try_from_components(0, 91, 0).unwrap()
+        );
 
         // Same idea for level 1
         let level = &STANDARD_LEVELS[1];
-        assert_eq!(base_tile_id(level, 0, 0), GraphId::try_from_components(1, 0, 0).unwrap());
-        assert_eq!(base_tile_id(level, 1, 0), GraphId::try_from_components(1, 1, 0).unwrap());
-        assert_eq!(base_tile_id(level, 0, 1), GraphId::try_from_components(1, 360, 0).unwrap());
-        assert_eq!(base_tile_id(level, 1, 1), GraphId::try_from_components(1, 361, 0).unwrap());
+        assert_eq!(
+            base_tile_id(level, 0, 0),
+            GraphId::try_from_components(1, 0, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 1, 0),
+            GraphId::try_from_components(1, 1, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 0, 1),
+            GraphId::try_from_components(1, 360, 0).unwrap()
+        );
+        assert_eq!(
+            base_tile_id(level, 1, 1),
+            GraphId::try_from_components(1, 361, 0).unwrap()
+        );
     }
 }

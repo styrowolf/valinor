@@ -1,7 +1,7 @@
 use crate::GraphId;
 use crate::graph_tile::{LookupError, MmapTilePointer, TileOffset};
 use crate::tile_provider::{GraphTileProviderError, TarballTileProvider};
-use crate::traffic_tile::{TrafficSpeed, TrafficTileHeader};
+use crate::traffic_tile::{TRAFFIC_TILE_VERSION, TrafficSpeed, TrafficTileHeader};
 use std::path::Path;
 
 /// The traffic tarball tile provider.
@@ -112,6 +112,11 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
         // the underlying graph, which means we can assume the directed edge count will never change
         // for a given tile during the life of the program.
         let header: TrafficTileHeader = unsafe { header_pointer.read_volatile() };
+
+        if header.traffic_tile_version() != TRAFFIC_TILE_VERSION {
+            return Err(GraphTileProviderError::UnsupportedTileVersion);
+        }
+
         if graph_id.index() >= u64::from(header.directed_edge_count()) {
             return Err(GraphTileProviderError::GraphTileLookupError(
                 LookupError::InvalidIndex,

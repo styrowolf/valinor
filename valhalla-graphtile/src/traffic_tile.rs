@@ -4,7 +4,6 @@
 //! These follow a different format from the routing graph.
 
 use bitfield_struct::bitfield;
-use thiserror::Error;
 use zerocopy::{LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
 
@@ -21,28 +20,7 @@ pub const MAX_CONGESTION_VAL: u8 = 63;
 /// The Valhalla traffic tile version.
 /// See the note on the `traffic_tile_version` field.
 /// In Valhalla, this is currently tied to the Valhalla major version.
-const TRAFFIC_TILE_VERSION: u8 = 3;
-
-#[derive(Debug, Error)]
-pub enum TrafficTileDecodingError {
-    #[error("Unable to extract a slice of the correct length; the tile data is malformed.")]
-    SliceArrayConversion(#[from] std::array::TryFromSliceError),
-    #[error("Unable to extract a slice of the correct length; the tile data is malformed.")]
-    SliceLength,
-    #[error("The byte sequence is not valid for this type.")]
-    ByteSequenceValidityError,
-    #[error(
-        "Data cast failed for field {field} (this almost always means invalid data): {error_description}"
-    )]
-    CastError {
-        field: String,
-        error_description: String,
-    },
-    #[error(
-        "Expected to have consumed all bytes in the graph tile, but we still have a leftover buffer of {0} bytes. This is either a tile reader implementation error, or the tile is invalid."
-    )]
-    LeftoverBytesAfterReading(usize),
-}
+pub const TRAFFIC_TILE_VERSION: u32 = 3;
 
 /// The header for a traffic tile.
 ///
@@ -72,6 +50,14 @@ pub struct TrafficTileHeader {
 impl TrafficTileHeader {
     pub fn directed_edge_count(&self) -> u32 {
         self.directed_edge_count.get()
+    }
+
+    /// Gets the traffic tile version number.
+    ///
+    /// This is currently tied to the Valhalla major version number,
+    /// and can be verified against [`TRAFFIC_TILE_VERSION`] to ensure that we understand the file.
+    pub fn traffic_tile_version(&self) -> u32 {
+        self.traffic_tile_version.get()
     }
 }
 

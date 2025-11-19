@@ -26,10 +26,10 @@ struct Tippecanoe {
     min_zoom: u8,
 }
 
-impl From<(&TileLevel, RoadClass)> for Tippecanoe {
-    fn from((level, road_class): (&TileLevel, RoadClass)) -> Self {
+impl From<(&TileLevel, bool, RoadClass)> for Tippecanoe {
+    fn from((level, is_shortcut, road_class): (&TileLevel, bool, RoadClass)) -> Self {
         Self {
-            layer: level.name,
+            layer: if is_shortcut { "shortcut" } else { level.name },
             min_zoom: std::cmp::min(
                 12,
                 level.tiling_system.min_zoom()
@@ -95,8 +95,10 @@ impl EdgeRecord<'_> {
     ) -> Result<EdgeRecord<'a>, anyhow::Error> {
         Ok(EdgeRecord {
             record_type: "Feature",
-            tippecanoe: Tippecanoe::from((tile_level, edge.classification())),
-            geometry: Geometry::from(edge_info.shape()?),
+            tippecanoe: Tippecanoe::from((tile_level, edge.is_shortcut(), edge.classification())),
+            // Note: it doesn't matter if the edge info is forward or reversed in our usage;
+            // we're just generating display maps.
+            geometry: Geometry::from(&LineString::new(edge_info.decode_raw_shape()?)),
             properties: EdgeProperties::new(edge, edge_info),
         })
     }

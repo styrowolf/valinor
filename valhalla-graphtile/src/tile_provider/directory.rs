@@ -170,6 +170,7 @@ mod test {
     use super::DirectoryGraphTileProvider;
     use crate::GraphId;
     use crate::graph_tile::GraphTile;
+    use crate::tile_hierarchy::STANDARD_LEVELS;
     use crate::tile_provider::GraphTileProvider;
     use core::num::NonZeroUsize;
     use rand::{
@@ -177,7 +178,6 @@ mod test {
         rng,
     };
     use std::path::PathBuf;
-
     // NOTE: In most projects, these tests would be written with #[tokio::test] for simplicity.
     // We avoid that in our tests to enable greater compatibility under Miri.
     // Miri support for syscalls on non-Linux platforms, even Tier 1 ones, is limited.
@@ -225,6 +225,60 @@ mod test {
             let (opp_edge_id, _) = futures::executor::block_on(provider.get_opposing_edge(edge_id))
                 .expect("Unable to get opposing edge.");
             assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
+        }
+    }
+
+    #[test]
+    fn test_hierarchy_properties() {
+        // This test isn't quite so much about Valinor's correctness as it is about documenting
+        // how the tile structure works.
+        // Specifically, there is only a single "copy" of a feature in the routing graph,
+        // and all features of a specific road class exist in specific tile levels.
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("andorra-tiles");
+        let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(1).unwrap());
+        let graph_ids = vec![
+            GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID"),
+            GraphId::try_from_components(1, 47701, 0).expect("Unable to create graph ID"),
+            GraphId::try_from_components(2, 762485, 0).expect("Unable to create graph ID"),
+        ];
+
+        for graph_id in graph_ids {
+            let level = graph_id.level();
+            let tile = futures::executor::block_on(provider.get_tile_containing(graph_id))
+                .expect("Unable to get tile");
+
+            // Minimally test that we got the correct tile
+            assert_eq!(tile.header().graph_id(), graph_id);
+            assert_eq!(tile.header().graph_id().value(), graph_id.value());
+
+            // Make sure the edges contain the types of edges we expect
+            let level_info = &STANDARD_LEVELS[level as usize];
+            assert_eq!(level_info.level, level);
+
+            for edge in tile.directed_edges() {
+                if level == 2 {
+                    assert!(
+                        !edge.is_shortcut(),
+                        "We never expect to see a shortcut at level 2"
+                    )
+                }
+
+                assert!(
+                    edge.classification() <= level_info.minimum_road_class,
+                    "Violated minimum road class restriction for this level"
+                );
+
+                if level > 0 {
+                    assert!(
+                        edge.classification()
+                            > STANDARD_LEVELS[(level - 1) as usize].minimum_road_class,
+                        "Unexpected feature with classification {:?} in tile level {level}",
+                        edge.classification()
+                    );
+                }
+            }
         }
     }
 }

@@ -70,7 +70,18 @@ pub enum InvalidGraphIdError {
 /// Note that there are only 46 used bits in the scheme (ask Valhalla's authors why 46).
 #[repr(C)]
 #[derive(
-    IntoBytes, Immutable, Unaligned, FromBytes, Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd,
+    IntoBytes,
+    Immutable,
+    Unaligned,
+    FromBytes,
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+    Ord,
+    PartialOrd,
 )]
 pub struct GraphId(U64<LE>);
 

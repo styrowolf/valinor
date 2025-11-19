@@ -8,7 +8,7 @@
 //! For writing tiles, a safe builder API is provided in [`GraphTileBuilder`].
 use std::sync::Arc;
 use thiserror::Error;
-use zerocopy::{FromBytes, I16, LE, U32, transmute};
+use zerocopy::{FromBytes, I16, LE, U32};
 
 use enumset::EnumSet;
 use memmap2::MmapRaw;
@@ -131,6 +131,27 @@ pub trait GraphTile {
     /// or the index is invalid.
     fn get_node(&self, id: GraphId) -> Result<&NodeInfo, LookupError>;
 
+    /// Gets a slice of all outbound directed edges from the node.
+    ///
+    /// No filtering is applied, and this includes edges of all types.
+    /// (See also: [`get_transitions`](GraphTile::get_transitions)
+    /// if you need edges that may leave the current hierarchy level).
+    ///
+    /// # Performance
+    ///
+    /// This does not perform any heap allocations and returns a continuous slice.
+    ///
+    /// # Errors
+    ///
+    /// This function may return an incorrect result or panic if the node info
+    /// is from another tile.
+    /// The node info does not contain tile information, so it is the responsibility of the caller
+    /// to ensure this.
+    fn get_outbound_edges_from_node(&self, node_info: &NodeInfo) -> &[DirectedEdge];
+
+    /// Gets a slice of all (outbound) transitions (links to other levels) from a node.
+    fn get_transitions(&self, node: &NodeInfo) -> &[NodeTransition];
+
     /// Gets a reference to the directed edge in this tile by graph ID.
     ///
     /// # Errors
@@ -177,14 +198,18 @@ pub trait GraphTile {
 
     /// Gets edge info for a directed edge.
     ///
-    /// Note that this is NOT a zero-cost operation and involves parsing data
-    /// from various parts of memory such as the text list.
+    /// Note that this is NOT a zero-cost operation.
+    /// While it does not immediately decode everything,
+    /// several memory accesses and checks need to happen upfront.
     /// As such, it is recommended to avoid calling this during costing.
     ///
     /// # Errors
     ///
     /// Since this accepts a directed edge reference,
-    /// any errors that arise are due to invalid/corrupt graph tiles.
+    /// two types of errors are possible:
+    ///
+    /// * An invalid/corrupt graph tile (a serious tile validity error)
+    /// * An edge not belonging to the current tile (there is no way to verify this; it is the caller's responsibility)
     fn get_edge_info(
         &self,
         directed_edge: &DirectedEdge,
@@ -424,6 +449,17 @@ impl GraphTile for OwnedGraphTileHandle {
     }
 
     #[inline]
+    fn get_outbound_edges_from_node(&self, node_info: &NodeInfo) -> &[DirectedEdge] {
+        self.borrow_dependent()
+            .get_outbound_edges_from_node(node_info)
+    }
+
+    #[inline]
+    fn get_transitions(&self, node: &NodeInfo) -> &[NodeTransition] {
+        self.borrow_dependent().get_transitions(node)
+    }
+
+    #[inline]
     fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
         self.borrow_dependent().get_directed_edge(id)
     }
@@ -500,7 +536,7 @@ impl TryFrom<Vec<u8>> for OwnedGraphTileHandle {
 /// Access should normally go through the [`GraphTile`] trait.
 pub struct GraphTileView<'a> {
     /// Header with various metadata about the tile and internal sizes.
-    header: GraphTileHeader,
+    header: &'a GraphTileHeader,
     /// The list of nodes in the graph tile.
     nodes: &'a [NodeInfo],
     /// The list of transitions between nodes on different levels.
@@ -555,6 +591,21 @@ impl GraphTile for GraphTileView<'_> {
         } else {
             Err(LookupError::MismatchedBase)
         }
+    }
+
+    #[inline]
+    fn get_outbound_edges_from_node(&self, node_info: &NodeInfo) -> &[DirectedEdge] {
+        let start = node_info.edge_index() as usize;
+        let count = usize::from(node_info.edge_count());
+
+        &self.directed_edges[start..(start + count)]
+    }
+
+    #[inline]
+    fn get_transitions(&self, node: &NodeInfo) -> &[NodeTransition] {
+        let start = node.transition_index() as usize;
+        let count = usize::from(node.transition_count());
+        &self.transitions[start..(start + count)]
     }
 
     fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
@@ -661,8 +712,14 @@ impl GraphTile for GraphTileView<'_> {
 
     #[inline]
     fn bin_index_xy(&self, x: usize, y: usize) -> usize {
-        assert!(x << 1 < crate::BIN_COUNT, "x must be less than the square root of crate::BIN_COUNT");
-        assert!(y << 1 < crate::BIN_COUNT, "y must be less than the square root of crate::BIN_COUNT");
+        assert!(
+            x << 1 < crate::BIN_COUNT,
+            "x must be less than the square root of crate::BIN_COUNT"
+        );
+        assert!(
+            y << 1 < crate::BIN_COUNT,
+            "y must be less than the square root of crate::BIN_COUNT"
+        );
 
         let level = self.header.graph_id().level();
         // Find the subdivision count for this level (defaults to 5 if unknown)
@@ -679,18 +736,12 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
     type Error = GraphTileDecodingError;
 
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
-        // Get the byte range of the header so we can transmute it
-        const HEADER_SIZE: usize = size_of::<GraphTileHeader>();
-
-        if bytes.len() < HEADER_SIZE {
-            return Err(GraphTileDecodingError::SliceLength);
-        }
-
-        let header_range = 0..HEADER_SIZE;
-
-        // Fixed-size header
-        let header_slice: [u8; HEADER_SIZE] = bytes[header_range].try_into()?;
-        let header: GraphTileHeader = transmute!(header_slice);
+        let (header, bytes) = GraphTileHeader::ref_from_prefix(bytes).map_err(|e| {
+            GraphTileDecodingError::CastError {
+                field: "header".to_string(),
+                error_description: e.to_string(),
+            }
+        })?;
 
         let level = header.graph_id().level();
         if level > 2 {
@@ -715,10 +766,6 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
         // that there are no accidentally overlapping borrows!
         // Additionally, at the end, we can check that we've consumed all bytes,
         // thus ensuring that we have either mapped every byte or else something is wrong.
-
-        // Reference to the slice which we'll keep re-binding as we go,
-        // consuming the DSTs as we go.
-        let bytes = &bytes[HEADER_SIZE..];
 
         // Basic features
         let (nodes, bytes) =
@@ -1133,7 +1180,10 @@ mod tests {
         // insta internally does a fork operation, which is not supported under Miri
         if !cfg!(miri) {
             insta::assert_debug_snapshot!("first_edge_info", first_edge_info);
-            insta::assert_debug_snapshot!("first_edge_info_decoded_shape", first_edge_info.shape());
+            insta::assert_debug_snapshot!(
+                "first_edge_info_decoded_shape",
+                first_edge_info.decode_raw_shape()
+            );
             insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
         }
 

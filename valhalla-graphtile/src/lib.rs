@@ -30,7 +30,7 @@ pub use graph_id::GraphId;
 /// - For estimating speeds when better data is not available
 /// - To determine preference / avoidance for roads
 #[repr(u8)]
-#[derive(TryFromBytes, Debug, Eq, PartialEq)]
+#[derive(TryFromBytes, Debug, Eq, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum RoadClass {
     Motorway,
