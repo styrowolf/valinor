@@ -992,6 +992,7 @@ dependencies = [
  "geo",
  "memmap2",
  "pico-args",
+ "rayon",
  "tar",
  "valhalla-graphtile",
  "walkdir",
@@ -1013,6 +1014,15 @@ dependencies = [
  "serde_json",
  "valhalla-graphtile",
  "zstd",
+]
+
+[[package]]
+name = "valinor-map-match"
+version = "0.1.0"
+dependencies = [
+ "geo",
+ "rstar",
+ "valhalla-graphtile",
 ]
 
 [[package]]

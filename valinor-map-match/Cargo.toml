@@ -1,0 +1,16 @@
+[package]
+name = "valinor-map-match"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde", "serialize_predicted_speed"] }
+geo.workspace = true
+rstar = "0.12.2"
+
+[lints]
+workspace = true
+
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]

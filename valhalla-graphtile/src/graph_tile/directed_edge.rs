@@ -403,6 +403,12 @@ impl DirectedEdge {
         // Safety: The access bits are length 12, so invalid representations are impossible.
         unsafe { EnumSet::from_repr_unchecked(self.fourth_bitfield.reverse_access()) }
     }
+
+    /// In meters
+    #[inline]
+    pub fn length(&self) -> u32 {
+        self.fifth_bitfield.length()
+    }
 }
 
 // The bitfield struct macros break serde field attributes, so we roll our own for now.

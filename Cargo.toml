@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
     "valhalla-graphtile", "valhalla-traffic",
-    "valinor-export-graph",
+    "valinor-export-graph", "valinor-map-match",
 ]
 
 [workspace.dependencies]

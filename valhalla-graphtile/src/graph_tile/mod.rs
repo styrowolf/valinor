@@ -3,6 +3,7 @@ use zerocopy::transmute;
 
 use bytes::Bytes;
 use enumset::EnumSet;
+use std::ptr::addr_of;
 #[cfg(test)]
 use std::sync::LazyLock;
 
@@ -77,7 +78,7 @@ pub struct GraphTile<'a> {
     signs: &'a [Sign],
     turn_lanes: &'a [TurnLane],
     admins: &'a [Admin],
-    edge_bins: GraphId,
+    edge_bins: &'a [GraphId],
     // TODO: Complex forward restrictions
     // TODO: Complex reverse restrictions
     // TODO: Street names (names here)
@@ -202,6 +203,23 @@ impl GraphTile<'_> {
             self.memory.slice(text_start..text_start + text_size),
         ))
     }
+
+    fn get_bin_offset(&self, bin_index: usize) -> u32 {
+        // TODO: put out error if bin_index is out of bounds
+        assert!(bin_index < self.header.bin_offsets.len());
+        self.header.bin_offsets[bin_index]
+    }
+
+    pub fn get_bin(&self, index: usize) -> &[GraphId] {
+        let start = if index == 0 {
+            0
+        } else {
+            self.get_bin_offset(index - 1) as usize
+        };
+        let end = self.get_bin_offset(index) as usize;
+
+        &self.edge_bins[start..end]
+    }
 }
 
 // TODO: Feels like this could be a macro
@@ -296,10 +314,10 @@ impl TryFrom<Bytes> for GraphTile<'_> {
         let (admins, offset) =
             transmute_slice!(Admin, value, offset, header.admin_count() as usize)?;
 
-        const U64_SIZE: usize = size_of::<u64>();
-        let slice: [u8; U64_SIZE] = (&value[offset..offset + U64_SIZE]).try_into()?;
-        let raw_graph_id = transmute!(slice);
-        let edge_bins = GraphId::try_from_id(raw_graph_id)?;
+        // FIXME: May not always be safe.
+        let edge_bin_edge_count = header.bin_offsets[header.bin_offsets.len() - 1] as usize;
+        let (edge_bins, offset) =
+            transmute_slice!(GraphId, value, offset, edge_bin_edge_count)?;
 
         Ok(Self {
             memory: bytes,
@@ -403,14 +421,14 @@ mod tests {
         assert_eq!(found_partial_subset_count, 4);
     }
 
-    #[test]
-    fn test_edge_bins() {
-        // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
-        let tile = &*TEST_GRAPH_TILE;
-        assert_eq!(tile.edge_bins.level(), 0);
-        assert_eq!(tile.edge_bins.tile_id(), 0);
-        assert_eq!(tile.edge_bins.index(), 32000);
-    }
+    //#[test]
+    //fn test_edge_bins() {
+    //    // TODO: TBH I don't actually understand how this is a valid graph tile. Clearly some black bit magic.
+    //    let tile = &*TEST_GRAPH_TILE;
+    //    assert_eq!(tile.edge_bins.level(), 0);
+    //    assert_eq!(tile.edge_bins.tile_id(), 0);
+    //    assert_eq!(tile.edge_bins.index(), 32000);
+    //}
 
     #[test]
     fn test_edge_info() {
