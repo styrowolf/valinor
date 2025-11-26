@@ -387,7 +387,7 @@ impl MmapTilePointer {
     ///   The check for lock-free atomics on the target for this value size _typically_ indicates
     ///   that loads and stores **to memory** are atomic for naturally aligned pointers.
     ///   This implies nothing about _ordering_, but it does protect against torn writes.
-    pub unsafe fn write_volatile<T>(&self, value: T) -> () {
+    pub unsafe fn write_volatile<T>(&self, value: T) {
         const {
             let has_atomic = match size_of::<T>() {
                 1 => cfg!(target_has_atomic = "8"),
@@ -579,7 +579,7 @@ impl GraphTile for GraphTileView<'_> {
 
     #[inline]
     fn header(&self) -> &GraphTileHeader {
-        &self.header
+        self.header
     }
 
     #[inline]

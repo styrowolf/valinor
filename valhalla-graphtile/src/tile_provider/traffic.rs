@@ -223,7 +223,7 @@ impl TrafficTileProvider<true> {
 mod tests {
     use crate::GraphId;
     use crate::tile_provider::TrafficTileProvider;
-    use crate::traffic_tile::TrafficSpeed;
+    use crate::traffic_tile::{SpeedValue, TrafficSpeed};
     use std::path::PathBuf;
 
     #[test]
@@ -286,7 +286,10 @@ mod tests {
 
         unsafe {
             provider
-                .update_speed_for_edge(graph_id, TrafficSpeed::single_speed(DESIRED_SPEED).unwrap())
+                .update_speed_for_edge(
+                    graph_id,
+                    TrafficSpeed::single_speed(SpeedValue::try_new(DESIRED_SPEED).unwrap(), None),
+                )
                 .expect("Failed to set speed for edge");
         }
 

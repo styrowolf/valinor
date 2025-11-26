@@ -96,6 +96,9 @@ pub trait GraphTileProvider {
 
     /// Gets the opposing edge.
     ///
+    /// All edges in a Valhalla graph are directed and stored as a pair.
+    /// This function makes it easy to get the opposite one.
+    ///
     /// # Errors
     ///
     /// This may fail under the following circumstances:

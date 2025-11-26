@@ -85,8 +85,7 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
             if offset == 0 || !offset.is_multiple_of(512) {
                 return Err(GraphTileProviderError::InvalidTarball(format!(
                     "Expected all index offsets to lie on a 512-byte boundary, but the index entry for {} has offset {}",
-                    graph_id.to_string(),
-                    offset,
+                    graph_id, offset,
                 )));
             }
 
@@ -162,6 +161,12 @@ impl<const MUT: bool> GraphTileProvider for TarballTileProvider<MUT> {
 }
 
 impl<const MUT: bool> TarballTileProvider<MUT> {
+    /// Gets a pointer for the tile containing this graph ID.
+    ///
+    /// # Errors
+    ///
+    /// If the tile is not part of the tarball archive,
+    /// this returns [`GraphTileProviderError::TileDoesNotExist`].
     pub fn get_pointer_for_tile_containing(
         &self,
         graph_id: GraphId,
@@ -215,6 +220,10 @@ impl TarballTileProvider<true> {
     /// Flushes outstanding memory map modifications to disk.
     ///
     /// See [`MmapRaw::flush`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// This may fail due to any of the usual reasons I/O operations fail.
     pub fn flush(&self) -> std::io::Result<()> {
         self.mmap.flush()
     }

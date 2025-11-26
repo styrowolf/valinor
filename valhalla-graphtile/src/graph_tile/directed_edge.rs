@@ -441,6 +441,14 @@ impl DirectedEdge {
         self.third_bitfield.set_has_predicted_speed(value.into());
     }
 
+    /// Is this edge an internal intersection?
+    ///
+    /// TODO: Document what exactly this means
+    #[inline]
+    pub const fn is_intersection_internal(&self) -> bool {
+        self.fourth_bitfield.is_intersection_internal() != 0
+    }
+
     /// Gets the set of access modes allowed to traverse this edge forward.
     #[inline]
     pub fn forward_access(&self) -> EnumSet<Access> {
@@ -515,6 +523,7 @@ impl Serialize for DirectedEdge {
         state.serialize_field("truck_route", &self.truck_route())?;
         #[cfg(feature = "serialize_predicted_speed")]
         state.serialize_field("has_predicted_speed", &self.has_predicted_speed())?;
+        state.serialize_field("is_internal_intersection", &self.is_intersection_internal())?;
 
         state.serialize_field(
             "forward_access",

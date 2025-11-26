@@ -300,8 +300,8 @@ impl NodeInfo {
     /// From the Valhalla docs:
     ///
     /// > Get the number of regular edges across all levels (up to
-    ///   kMaxLocalEdgeIndex+1). Does not include shortcut edges,
-    ///   transit edges and transit connections, and transition edges.
+    /// > kMaxLocalEdgeIndex+1). Does not include shortcut edges,
+    /// > transit edges and transit connections, and transition edges.
     /// >
     /// > `@return` Returns the number of edges on the local level.
     ///
