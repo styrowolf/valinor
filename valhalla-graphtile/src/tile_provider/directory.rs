@@ -2,9 +2,10 @@ use crate::GraphId;
 use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::{GraphTileBuildError, GraphTileBuilder};
 use crate::graph_tile::{GraphTileView, OwnedGraphTileHandle};
+use crate::spatial::bbox_with_center;
 use crate::tile_hierarchy::STANDARD_LEVELS;
 use crate::tile_provider::{
-    GraphTileProvider, GraphTileProviderError, LockTable, OwnedGraphTileProvider, bbox_with_center,
+    GraphTileProvider, GraphTileProviderError, LockTable, OwnedGraphTileProvider,
 };
 use geo::Point;
 use lru::LruCache;

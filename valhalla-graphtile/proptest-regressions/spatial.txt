@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc db07b428a07254a21cd2e8bd1293713bc686593967d2d9c0b037aa024426ef14 # shrinks to lat1 = 0.0, lon1 = 0.0, lat2 = 0.0, lon2 = 161.78755
+cc a837b7f44b670a42dc0932ca2fe54e179a1cb7f018be968dfd2839cf4f22c73f # shrinks to lat = 0.0, lon = 0.0, dlat = 0.0, dlon = 0.009749106201249247
+cc eac8ef59169472f06e7f47fc061bbfd09663f24ec9bee87b3766caaea108b433 # shrinks to lat = -84.40874199540865, lon = 0.0, dlat = 0.0020240494437906253, dlon = 0.0
+cc 995c39b9cd583c3719822bd4d339ac3c8f16a70e3225e50578cd3a59c03f4cb1 # shrinks to lat = 0.0, lon = 0.0, dlat = 0.0, dlon = -0.0004342662937446799
+cc e40cfcb605148ea23cf21ba181570af42c6675fb16af5e5352545cfda1b5372f # shrinks to lat = 70.0148902051528, lon = 0.0, dlat = 0.0, dlon = 0.002376079346540448
+cc 70d266a399926a0495763b294061313daa1d63bab7a5182241099f5f9a26f990 # shrinks to lat = 68.03649511882202, lon = 0.0, dlat = 0.0006238990726149422, dlon = -0.0015256322755159424
+cc 01f70ff05ea41ca6fc19ef8b8f607bd2879d5c60f071c7e376952a9f05150724 # shrinks to lat = -19.891893631177865, lon = 0.0, dlat = -0.0008198468188925771, dlon = 0.00037754929458748226

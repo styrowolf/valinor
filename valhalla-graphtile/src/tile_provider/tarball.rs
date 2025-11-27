@@ -1,6 +1,8 @@
-use super::{GraphTileProvider, GraphTileProviderError, bbox_with_center};
+use super::{GraphTileProvider, GraphTileProviderError};
 use crate::GraphId;
 use crate::graph_tile::{GraphTileView, MmapTilePointer, TileOffset};
+use crate::spatial::bbox_with_center;
+use crate::tile_hierarchy::STANDARD_LEVELS;
 use geo::Point;
 use memmap2::{MmapOptions, MmapRaw};
 use std::collections::HashMap;
@@ -11,8 +13,6 @@ use std::sync::Arc;
 use tar::Archive;
 use zerocopy::{FromBytes, LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
-
-use crate::tile_hierarchy::STANDARD_LEVELS;
 
 /// A tile provider backed by a memory-mapped tarball archive.
 ///

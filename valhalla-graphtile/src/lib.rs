@@ -3,6 +3,7 @@
 mod graph_id;
 pub mod graph_tile;
 pub mod shape_codec;
+pub mod spatial;
 pub mod tile_hierarchy;
 pub mod tile_provider;
 pub mod traffic_tile;

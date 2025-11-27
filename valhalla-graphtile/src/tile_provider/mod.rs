@@ -6,7 +6,7 @@
 
 use crate::GraphId;
 use dashmap::DashMap;
-use geo::{Destination, Haversine, Point};
+use geo::Point;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
@@ -178,21 +178,6 @@ impl<K: std::hash::Hash + Eq + Clone> LockTable<K> {
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     }
-}
-
-/// Returns a bounding box centered upon `center` containing a circle with radius `radius` meters.
-///
-/// The bbox is in (N, E, S, W) order.
-pub(crate) fn bbox_with_center(center: Point, radius: f64) -> (f64, f64, f64, f64) {
-    // Per https://github.com/georust/geo/pull/1091/,
-    // the longitude values should be normalized to [-180, 180].
-    // We assert this again in a unit test below.
-    let north = Haversine.destination(center, 0.0, radius).y();
-    let east = Haversine.destination(center, 90.0, radius).x();
-    let south = Haversine.destination(center, 180.0, radius).y();
-    let west = Haversine.destination(center, 270.0, radius).x();
-
-    (north, east, south, west)
 }
 
 #[cfg(test)]

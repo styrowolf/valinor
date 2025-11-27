@@ -86,7 +86,7 @@ impl TrafficTileHeader {
 ///
 /// Values must be non-zero. To indicate a closed segment,
 /// use helpers like [`TrafficSpeed::closed`] or [`TrafficSpeedBuilder::with_closed_segment`]
-#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq), validate(greater=0, less_or_equal=MAX_TRAFFIC_SPEED_KPH))]
+#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_TRAFFIC_SPEED_KPH))]
 pub struct SpeedValue(u8);
 
 impl SpeedValue {
@@ -109,7 +109,7 @@ impl SpeedValue {
 /// assert!(CongestionValue::try_new(0).is_err(), "Zero is a reserved value (None signifies unknown congestion in the TrafficSpeed and TrafficSpeedBuilder)");
 /// assert!(CongestionValue::try_new(MAX_CONGESTION_VAL + 1).is_err(), "Values above this are not supported");
 /// ```
-#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq), validate(greater=0, less_or_equal=MAX_CONGESTION_VAL))]
+#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_CONGESTION_VAL))]
 pub struct CongestionValue(u8);
 
 /// The traffic conditions along a single segment in a traffic tile.
@@ -356,8 +356,14 @@ pub enum TrafficSpeedBuilderError {
     NoSegments,
     #[error("Tried to add too many segments (the max is 3)")]
     TooManySegments,
-    #[error("Section lengths are longer than the underlying edge")]
-    SectionLengthExceedsEdge,
+    #[error(
+        "Section lengths would total longer than the underlying edge: {current_length} (current length) + {new_section_length} (new length) > {edge_length} (edge length)"
+    )]
+    SectionLengthExceedsEdge {
+        current_length: u32,
+        new_section_length: u32,
+        edge_length: u32,
+    },
     #[error(
         "Section lengths are shorter than the underlying edge; you should specify unknown regions explicitly"
     )]
@@ -404,6 +410,23 @@ impl TrafficSpeedBuilder {
         }
     }
 
+    fn test_can_add_segment_of_length(&self, length: u32) -> Result<(), TrafficSpeedBuilderError> {
+        if self.speeds.len() == 3 {
+            return Err(TooManySegments);
+        }
+
+        let current_length = self.current_length();
+        if current_length + length > self.edge_length {
+            return Err(SectionLengthExceedsEdge {
+                current_length,
+                new_section_length: length,
+                edge_length: self.edge_length,
+            });
+        }
+
+        Ok(())
+    }
+
     /// Adds a new segment to the builder with traffic flowing at some non-zero rate.
     ///
     /// The congestion information is optional;
@@ -422,16 +445,8 @@ impl TrafficSpeedBuilder {
         congestion: Option<CongestionValue>,
         length: u32,
     ) -> Result<Self, TrafficSpeedBuilderError> {
-        let current_length = self.current_length();
+        self.test_can_add_segment_of_length(length)?;
         let mut speeds = self.speeds;
-
-        if speeds.len() == 3 {
-            return Err(TooManySegments);
-        }
-
-        if current_length + length > self.edge_length {
-            return Err(SectionLengthExceedsEdge);
-        }
 
         let congestion = match congestion {
             Some(value) => value.into_inner(),
@@ -451,39 +466,23 @@ impl TrafficSpeedBuilder {
     /// - The `length` makes the accumulated total greater than the edge length
     /// - There are already 3 segments (Valhalla limit)
     pub fn with_closed_segment(self, length: u32) -> Result<Self, TrafficSpeedBuilderError> {
-        let current_length = self.current_length();
+        self.test_can_add_segment_of_length(length)?;
         let mut speeds = self.speeds;
-
-        if speeds.len() == 3 {
-            return Err(TooManySegments);
-        }
-
-        if current_length + length > self.edge_length {
-            return Err(SectionLengthExceedsEdge);
-        }
 
         speeds.push((CLOSED_TRAFFIC_SPEED_RAW, UNKNOWN_CONGESTION_VAL, length));
         Ok(Self { speeds, ..self })
     }
 
     pub fn with_unknown_segment(self, length: u32) -> Result<Self, TrafficSpeedBuilderError> {
-        let current_length = self.current_length();
+        self.test_can_add_segment_of_length(length)?;
         let mut speeds = self.speeds;
-
-        if speeds.len() == 3 {
-            return Err(TooManySegments);
-        }
-
-        if current_length + length > self.edge_length {
-            return Err(SectionLengthExceedsEdge);
-        }
 
         speeds.push((UNKNOWN_TRAFFIC_SPEED_KPH, UNKNOWN_CONGESTION_VAL, length));
         Ok(Self { speeds, ..self })
     }
 
     /// The length of segments added so far (in meters).
-    fn current_length(&self) -> u32 {
+    pub fn current_length(&self) -> u32 {
         self.speeds.iter().map(|(_, _, length)| length).sum()
     }
 
@@ -794,13 +793,22 @@ mod test {
             .build()
             .unwrap();
 
-        assert_eq!(speed.segment_info(0), SegmentTrafficInfo::NoData {breakpoint: 127});
-        assert_eq!(speed.segment_info(1), SegmentTrafficInfo::Speed {
-            speed_kph: 42,
-            congestion: None,
-            breakpoint: 255,
-        });
-        assert_eq!(speed.segment_info(2), SegmentTrafficInfo::NoData {breakpoint: 0});
+        assert_eq!(
+            speed.segment_info(0),
+            SegmentTrafficInfo::NoData { breakpoint: 127 }
+        );
+        assert_eq!(
+            speed.segment_info(1),
+            SegmentTrafficInfo::Speed {
+                speed_kph: 42,
+                congestion: None,
+                breakpoint: 255,
+            }
+        );
+        assert_eq!(
+            speed.segment_info(2),
+            SegmentTrafficInfo::NoData { breakpoint: 0 }
+        );
     }
 
     #[test]
@@ -822,9 +830,18 @@ mod test {
         // This is a bit of an edge case in Valhalla IMO.
         // This unit test documents the current, somewhat confusing behavior.
         assert!(speed.is_completely_closed());
-        assert_eq!(speed.segment_info(0), SegmentTrafficInfo::NoData {breakpoint: 127});
-        assert_eq!(speed.segment_info(1), SegmentTrafficInfo::Closed {breakpoint: 255});
-        assert_eq!(speed.segment_info(2), SegmentTrafficInfo::NoData {breakpoint: 0});
+        assert_eq!(
+            speed.segment_info(0),
+            SegmentTrafficInfo::NoData { breakpoint: 127 }
+        );
+        assert_eq!(
+            speed.segment_info(1),
+            SegmentTrafficInfo::Closed { breakpoint: 255 }
+        );
+        assert_eq!(
+            speed.segment_info(2),
+            SegmentTrafficInfo::NoData { breakpoint: 0 }
+        );
     }
 
     proptest! {
