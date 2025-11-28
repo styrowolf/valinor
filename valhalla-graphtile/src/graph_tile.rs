@@ -259,11 +259,6 @@ self_cell! {
 ///
 /// This provides a single type that can "own" the backing bytes for tile memory,
 /// which we leverage in the `self_cell` to create a zero-copy view.
-///
-/// # Safety
-///
-/// This doesn't make any strong synchronization guarantees.
-/// In fact, it's probably wildly unsafe if you have a map.
 pub struct MmapTilePointer {
     /// A handle to the memory map that can be shared across threads.
     pub(crate) mmap: Arc<MmapRaw>,

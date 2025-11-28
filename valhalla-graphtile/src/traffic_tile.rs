@@ -86,7 +86,8 @@ impl TrafficTileHeader {
 ///
 /// Values must be non-zero. To indicate a closed segment,
 /// use helpers like [`TrafficSpeed::closed`] or [`TrafficSpeedBuilder::with_closed_segment`]
-#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_TRAFFIC_SPEED_KPH))]
+#[cfg_attr(feature = "serde", nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_TRAFFIC_SPEED_KPH)))]
+#[cfg_attr(not(feature = "serde"), nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug), validate(greater=0, less_or_equal=MAX_TRAFFIC_SPEED_KPH)))]
 pub struct SpeedValue(u8);
 
 impl SpeedValue {
@@ -109,7 +110,8 @@ impl SpeedValue {
 /// assert!(CongestionValue::try_new(0).is_err(), "Zero is a reserved value (None signifies unknown congestion in the TrafficSpeed and TrafficSpeedBuilder)");
 /// assert!(CongestionValue::try_new(MAX_CONGESTION_VAL + 1).is_err(), "Values above this are not supported");
 /// ```
-#[nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_CONGESTION_VAL))]
+#[cfg_attr(feature = "serde", nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize), validate(greater=0, less_or_equal=MAX_CONGESTION_VAL)))]
+#[cfg_attr(not(feature = "serde"), nutype(const_fn, derive(Copy, Clone, Eq, PartialEq, Debug), validate(greater=0, less_or_equal=MAX_CONGESTION_VAL)))]
 pub struct CongestionValue(u8);
 
 /// The traffic conditions along a single segment in a traffic tile.
