@@ -36,3 +36,19 @@ pub fn decode_shape(bytes: &[u8]) -> std::io::Result<Vec<Coord>> {
 
     Ok(coords)
 }
+
+/// Decodes the _first_ coordinate in a Valhalla encoded shape from a byte buffer.
+///
+/// # Errors
+///
+/// Decoding may fail if the byte buffer is incorrectly sized or corrupt.
+pub fn decode_first_coordinate(bytes: &[u8]) -> std::io::Result<Coord> {
+    let mut bytes = bytes;
+    let lat = bytes.read_varint::<i32>()?;
+    let lon = bytes.read_varint::<i32>()?;
+
+    Ok(coord! {
+        x: f64::from(lon) * DECODE_PRECISION,
+        y: f64::from(lat) * DECODE_PRECISION,
+    })
+}

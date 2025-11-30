@@ -11,7 +11,7 @@ DirectedEdge {
         opposing_edge_index: U32(
             0,
         ),
-        forward_edge_info: 1,
+        is_edge_info_forward: 1,
         leaves_tile: 0,
         country_crossing: 0,
     },

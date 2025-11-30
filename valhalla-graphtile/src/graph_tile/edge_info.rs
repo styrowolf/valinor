@@ -10,6 +10,7 @@ use zerocopy_derive::{FromBytes, Immutable, KnownLayout, Unaligned};
 
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer, ser::SerializeStruct};
+use crate::shape_codec::decode_first_coordinate;
 
 #[bitfield(u32,
     repr = U32<LE>,
@@ -140,6 +141,26 @@ impl EdgeInfo<'_> {
     /// If expect to reuse geometries many times, you may want to cache the decoded geometries.
     pub fn decode_raw_shape(&self) -> std::io::Result<Vec<Coord>> {
         decode_shape(self.encoded_shape)
+    }
+
+    /// Decodes the _first_ coordinate of the geometry for an edge pair.
+    ///
+    /// # Directionality
+    ///
+    /// The same notes for [`EdgeInfo::decode_raw_shape`] apply.
+    /// This means that if you are trying to get the _starting_ coordinate for a directed edge,
+    /// you must first check whether the edge info is forward or reverse.
+    ///
+    /// # Errors
+    ///
+    /// See [`decode_shape`] for a description of possible errors.
+    ///
+    /// # Performance
+    ///
+    /// This is going to be pretty fast compared to [`EdgeInfo::decode_raw_shape`],
+    /// consisting of basically 2 memory accesses and 2 varint decodes.
+    pub fn decode_first_coordinate(&self) -> std::io::Result<Coord> {
+        decode_first_coordinate(self.encoded_shape)
     }
 
     // TODO: Other filters (tagged and linguistic filters)

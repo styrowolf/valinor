@@ -23,7 +23,7 @@ struct FirstBitfield {
     // Booleans represented this way for infailability.
     // See comment in node_info.rs for details.
     #[bits(1)]
-    forward_edge_info: u8,
+    is_edge_info_forward: u8,
     #[bits(1)]
     leaves_tile: u8,
     #[bits(1)]
@@ -302,7 +302,7 @@ impl DirectedEdge {
     /// Refer to the [`EdgeInfo`](crate::graph_tile::EdgeInfo) docs for info on why this matters.
     #[inline]
     pub const fn edge_info_is_forward(&self) -> bool {
-        self.first_bitfield.forward_edge_info() != 0
+        self.first_bitfield.is_edge_info_forward() != 0
     }
 
     /// Does the edge cross into a new country?
