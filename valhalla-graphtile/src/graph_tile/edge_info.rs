@@ -8,9 +8,9 @@ use std::borrow::Cow;
 use zerocopy::{FromBytes, LE, U16, U32};
 use zerocopy_derive::{FromBytes, Immutable, KnownLayout, Unaligned};
 
+use crate::shape_codec::decode_first_coordinate;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer, ser::SerializeStruct};
-use crate::shape_codec::decode_first_coordinate;
 
 #[bitfield(u32,
     repr = U32<LE>,

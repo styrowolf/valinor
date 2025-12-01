@@ -1,0 +1,16 @@
+[package]
+name = "valinor-cli"
+description = "A CLI multi-tool for quickly inspecting Valhalla graphs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde"] }
+
+[lints]
+workspace = true

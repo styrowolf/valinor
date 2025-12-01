@@ -477,10 +477,7 @@ impl Serialize for DirectedEdge {
     where
         S: Serializer,
     {
-        let num_fields = 22;
-
-        #[cfg(not(feature = "serialize_predicted_speed"))]
-        let num_fields = num_fields - 3;
+        let num_fields = 25;
 
         let mut state = serializer.serialize_struct("DirectedEdge", num_fields)?;
 
@@ -507,9 +504,7 @@ impl Serialize for DirectedEdge {
         state.serialize_field("no_thru", &self.no_thru())?;
 
         state.serialize_field("speed", &self.speed())?;
-        #[cfg(feature = "serialize_predicted_speed")]
         state.serialize_field("free_flow_speed", &self.free_flow_speed())?;
-        #[cfg(feature = "serialize_predicted_speed")]
         state.serialize_field("constrained_flow_speed", &self.constrained_flow_speed())?;
 
         // TODO: Name consistency
@@ -521,9 +516,10 @@ impl Serialize for DirectedEdge {
         state.serialize_field("toll", &self.toll())?;
         state.serialize_field("roundabout", &self.roundabout())?;
         state.serialize_field("truck_route", &self.truck_route())?;
-        #[cfg(feature = "serialize_predicted_speed")]
         state.serialize_field("has_predicted_speed", &self.has_predicted_speed())?;
         state.serialize_field("is_internal_intersection", &self.is_intersection_internal())?;
+        state.serialize_field("length", &self.length())?;
+        state.serialize_field("is_shortcut", &self.is_shortcut())?;
 
         state.serialize_field(
             "forward_access",

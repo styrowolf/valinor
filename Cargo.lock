@@ -2212,6 +2212,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "valinor-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+ "valhalla-graphtile",
+]
+
+[[package]]
 name = "valinor-export-graph"
 version = "0.1.0"
 dependencies = [

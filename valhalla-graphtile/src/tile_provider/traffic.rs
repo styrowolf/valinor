@@ -136,6 +136,11 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
             },
         })
     }
+
+    /// An iterator over all tile IDs contained in the tarball, in arbitrary order.
+    pub fn tile_ids(&self) -> impl Iterator<Item = &GraphId> {
+        self.tarball_tile_provider.tile_ids()
+    }
 }
 
 impl TrafficTileProvider<false> {

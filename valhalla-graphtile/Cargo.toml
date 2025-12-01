@@ -7,7 +7,6 @@ authors = ["Ian Wagner <ian@stadiamaps.com>"]
 
 [features]
 serde = ["dep:serde", "nutype/serde"]
-serialize_predicted_speed = ["serde"]
 
 [dependencies]
 tar = "0.4.44"

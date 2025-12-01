@@ -6,6 +6,8 @@
 use crate::traffic_tile::TrafficSpeedBuilderError::{SectionLengthExceedsEdge, TooManySegments};
 use bitfield_struct::bitfield;
 use nutype::nutype;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 use zerocopy::{LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
@@ -115,7 +117,7 @@ impl SpeedValue {
 pub struct CongestionValue(u8);
 
 /// The traffic conditions along a single segment in a traffic tile.
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Serialize)]
 pub enum SegmentTrafficInfo {
     /// There is no data for this segment.
     ///
@@ -347,6 +349,26 @@ impl TrafficSpeed {
     #[must_use]
     pub const fn with_incident_tile_bit(self) -> Self {
         self.with_has_incidents(1)
+    }
+}
+
+impl Serialize for TrafficSpeed {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let num_fields = 7;
+        let mut state = serializer.serialize_struct("TrafficSpeed", num_fields)?;
+
+        state.serialize_field("has_valid_speed", &self.has_valid_speed())?;
+        state.serialize_field("is_completely_closed", &self.is_completely_closed())?;
+        state.serialize_field("overall_speed", &self.overall_speed())?;
+        state.serialize_field("segment_info_0", &self.segment_info(0))?;
+        state.serialize_field("segment_info_1", &self.segment_info(1))?;
+        state.serialize_field("segment_info_2", &self.segment_info(2))?;
+        state.serialize_field("has_incident_tile", &self.has_incidents())?;
+
+        state.end()
     }
 }
 

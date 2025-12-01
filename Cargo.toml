@@ -8,6 +8,7 @@ members = [
     "valhalla-microservice",
     "valhalla-proto",
     "valhalla-response",
+    "valinor-cli",
     "valinor-export-graph",
 ]
 

@@ -130,6 +130,11 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, GraphTileProviderError> {
         Self::init(path)
     }
+
+    /// An iterator over all tile IDs contained in the tarball, in arbitrary order.
+    pub fn tile_ids(&self) -> impl Iterator<Item = &GraphId> {
+        self.tile_index.keys()
+    }
 }
 
 impl<const MUT: bool> GraphTileProvider for TarballTileProvider<MUT> {
