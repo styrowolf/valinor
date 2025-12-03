@@ -297,6 +297,7 @@ mod test {
 
     // TODO: An explicit test for a case spanning tiles would be nice, but the extract is too small.
 
+    #[cfg(not(miri))]
     #[test]
     fn test_level_zero_shortcut_sanity() {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
