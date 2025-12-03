@@ -285,6 +285,48 @@ impl DirectedEdge {
         self.seventh_bitfield.is_shortcut() != 0
     }
 
+    /// Determines if a directed edge is a valid _potential_ member of a shortcut.
+    ///
+    /// This is used for forming and resolving shortcuts only.
+    /// Returns `false` if it is already a shortcut!
+    #[inline]
+    pub const fn can_form_shortcut(&self) -> bool {
+        if self.is_shortcut() || self.has_bss_connection() {
+            // Already a shortcut!
+            return false;
+        }
+        match self.edge_use() {
+            // Cannot be related to transit
+            RoadUse::TransitConnection
+            | RoadUse::PlatformConnection
+            | RoadUse::EgressConnection => false,
+            // Cannot be under construction!
+            RoadUse::Construction => false,
+            // That's all!
+            _ => true,
+        }
+    }
+
+    #[inline]
+    pub const fn is_superseded(&self) -> bool {
+        self.seventh_bitfield.superseded() != 0
+    }
+
+    /// Gets the index of the shortcut edge that supersedes this edge
+    /// (within the end node's outbound edge list).
+    ///
+    /// Returns `None` if [`Self::is_superseded`] is false.
+    /// Otherwise, returns an index into the list (starting from _zero_, unlike Valhalla!).
+    #[inline]
+    pub const fn superseded_index(&self) -> Option<u32> {
+        let mask = self.seventh_bitfield.superseded();
+        if mask == 0 {
+            None
+        } else {
+            Some(mask.trailing_zeros())
+        }
+    }
+
     /// Does this edge end outside the current tile?
     #[inline]
     pub const fn leaves_tile(&self) -> bool {
@@ -443,10 +485,18 @@ impl DirectedEdge {
 
     /// Is this edge an internal intersection?
     ///
-    /// TODO: Document what exactly this means
+    /// TODO: Figure out what this affects in Valhalla
     #[inline]
     pub const fn is_intersection_internal(&self) -> bool {
         self.fourth_bitfield.is_intersection_internal() != 0
+    }
+
+    /// Does this lead to (or come out from) a bike share station?
+    ///
+    /// TODO: Figure out what this affects in Valhalla
+    #[inline]
+    pub const fn has_bss_connection(&self) -> bool {
+        self.fourth_bitfield.has_bss_connection() != 0
     }
 
     /// Gets the set of access modes allowed to traverse this edge forward.
@@ -477,7 +527,7 @@ impl Serialize for DirectedEdge {
     where
         S: Serializer,
     {
-        let num_fields = 25;
+        let num_fields = 26;
 
         let mut state = serializer.serialize_struct("DirectedEdge", num_fields)?;
 
@@ -520,6 +570,7 @@ impl Serialize for DirectedEdge {
         state.serialize_field("is_internal_intersection", &self.is_intersection_internal())?;
         state.serialize_field("length", &self.length())?;
         state.serialize_field("is_shortcut", &self.is_shortcut())?;
+        state.serialize_field("superseded_idx", &self.superseded_index())?;
 
         state.serialize_field(
             "forward_access",

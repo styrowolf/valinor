@@ -201,6 +201,7 @@ mod test {
         distr::{Distribution, Uniform},
         rng,
     };
+    use std::collections::HashSet;
     use std::path::PathBuf;
 
     #[test]
@@ -234,18 +235,145 @@ mod test {
 
         // Cross-check the default implementation of the opposing edge ID function.
         // We only check a subset because it takes too long otherwise.
-        // See the performance note on get_opposing_edge.
         let range = Uniform::try_from(0..u64::from(tile.header().directed_edge_count())).unwrap();
         for index in range.sample_iter(&mut rng).take(100) {
             let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
             let opp_edge_index = tile
                 .get_opp_edge_index(edge_id)
                 .expect("Unable to get opp edge index.");
-            let opp_edge_id = provider
-                .get_opposing_edge(edge_id)
+            let opp_edge_id_1 = provider
+                .graph_id_for_opposing_edge_index(opp_edge_index, tile.borrow_dependent())
+                .expect("Unable to get the full ID for the opposing edge index!");
+
+            let opp_edge_id_2 = provider
+                .get_opposing_edge(edge_id, tile.borrow_dependent())
                 .expect("Unable to get opposing edge.");
-            assert_eq!(u64::from(opp_edge_index), opp_edge_id.index());
+            assert_eq!(opp_edge_id_1, opp_edge_id_2);
         }
+    }
+
+    #[test]
+    fn test_get_shortcut_fixture() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("andorra-tiles");
+        let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(1).unwrap());
+
+        // This test relies on the state of the andorra-tiles fixtures.
+        // TODO: Once we get full-on tile construction from scratch, build a test case rather than relying on the fixture.
+        // This test was created with Valhalla as an oracle by adding the following code to valhalla_ways_to_edges.cc
+        // and scanning for a few representative shortcuts:
+        // if (edge->is_shortcut()) {
+        //   auto shortcuts = reader.RecoverShortcut(edge_id);
+        //
+        //   std::ostringstream oss;
+        //   oss << "[";
+        //   for (size_t i = 0; i < shortcuts.size(); ++i) {
+        //     if (i > 0)
+        //       oss << ", ";
+        //     oss << std::to_string(shortcuts[i]);
+        //   }
+        //   oss << "]";
+        //
+        //   LOG_INFO("Shortcut " + std::to_string(edge_id) + " contains edges: " + oss.str());
+        // }
+        let expected_shortcut_id = GraphId::try_from_components(0, 3015, 1).unwrap();
+        let graph_id = GraphId::try_from_components(0, 3015, 4).unwrap();
+        let shortcut_id = provider
+            .get_shortcut(graph_id)
+            .expect("Unable to get shortcut")
+            .unwrap();
+
+        assert_eq!(shortcut_id, expected_shortcut_id);
+
+        let graph_id = GraphId::try_from_components(0, 3015, 19).unwrap();
+        let shortcut_id = provider
+            .get_shortcut(graph_id)
+            .expect("Unable to get shortcut")
+            .unwrap();
+
+        assert_eq!(shortcut_id, expected_shortcut_id);
+    }
+
+    // TODO: An explicit test for a case spanning tiles would be nice, but the extract is too small.
+
+    #[test]
+    fn test_level_zero_shortcut_sanity() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("andorra-tiles");
+        let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(1).unwrap());
+
+        let base_id = GraphId::try_from_components(0, 3015, 0).unwrap();
+        provider.with_tile_containing_or_panic(base_id, |tile| {
+            let mut found_non_superseded_edge_with_shortcuts = false;
+            let mut edges_inside_shortcuts = 0;
+            let mut unique_shortcut_ids = HashSet::new();
+            for (idx, edge) in tile.directed_edges().iter().enumerate() {
+                let graph_id = base_id
+                    .with_index(idx as u64)
+                    .unwrap();
+
+                // Property test style assertions through all edges in this (small) level zero tile
+                let shortcut_id = if edge.is_superseded() {
+                    let shortcut_id = provider
+                        .get_shortcut(graph_id)
+                        .unwrap();
+
+                    assert!(
+                        shortcut_id.is_some(),
+                        "Superseded edges must be traceable back to a shortcut"
+                    );
+                    shortcut_id
+                } else {
+                    found_non_superseded_edge_with_shortcuts = true;
+                    provider
+                        .get_shortcut(graph_id)
+                        .unwrap()
+                };
+
+                if let Some(shortcut_id) = shortcut_id {
+                    // NOTE: This fixture also assumes we never go beyond a single tile
+                    let shortcut_edge = tile
+                        .get_directed_edge(shortcut_id)
+                        .unwrap();
+                    let edge_geom = tile.get_edge_info(edge).unwrap().decode_raw_shape().unwrap();
+                    let mut shortcut_edge_geom = tile.get_edge_info(shortcut_edge).unwrap().decode_raw_shape().unwrap();
+
+                    if edge.edge_info_is_forward() != shortcut_edge.edge_info_is_forward() {
+                        shortcut_edge_geom.reverse();
+                    }
+
+                    assert!(shortcut_edge_geom.len() >= edge_geom.len(), "Shortcuts should be at least as long as the underlying edge geom");
+
+                    if shortcut_edge_geom.len() == edge_geom.len() {
+                        assert_eq!(shortcut_edge_geom, edge_geom);
+                    } else {
+                        // Make sure the shortcut edge contains the underlying geom
+                        let mut found_match = false;
+                        for s_offset in 0..shortcut_edge_geom.len() {
+                            if shortcut_edge_geom[s_offset..].starts_with(&edge_geom) {
+                                found_match = true;
+                                break;
+                            }
+                        }
+
+                        assert!(found_match, "Couldn't find any matching sub-geometry. Shortcut = {shortcut_edge_geom:?}; Edge = {edge_geom:?}");
+                    }
+
+                    edges_inside_shortcuts += 1;
+                    unique_shortcut_ids.insert(shortcut_id);
+                }
+            }
+
+            assert!(found_non_superseded_edge_with_shortcuts, "Expected to find non-superseded edges with shortcuts too");
+            // You can verify and ballpark check (respectively) these numbers using the above C++ snippet in valhalla_ways_to_edges.cpp
+            assert_eq!(unique_shortcut_ids.len(), 414);
+            // We do a precise check here (even though it would break with a fixture tile rebuild)
+            // to ensure we don't accidentally break the get_shortcut method in a subtle way
+            // so that some shortcuts aren't reported.
+            assert_eq!(edges_inside_shortcuts, 2448);
+        });
     }
 
     #[test]

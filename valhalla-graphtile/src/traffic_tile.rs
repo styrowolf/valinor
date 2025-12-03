@@ -293,11 +293,13 @@ impl TrafficSpeed {
             }
             1 => {
                 self.breakpoint1() < 255
+                    && self.breakpoint1() > 0
                     && (self.encoded_speed2() == CLOSED_TRAFFIC_SPEED_RAW
                         || self.congestion2() == MAX_CONGESTION_VAL)
             }
             2 => {
                 self.breakpoint2() < 255
+                    && self.breakpoint2() > 0
                     && (self.encoded_speed3() == CLOSED_TRAFFIC_SPEED_RAW
                         || self.congestion3() == MAX_CONGESTION_VAL)
             }

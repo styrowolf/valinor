@@ -15,7 +15,7 @@ use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
-use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, LookupError, OwnedGraphTileHandle};
+use valhalla_graphtile::graph_tile::{DirectedEdge, GraphTile, OwnedGraphTileHandle};
 use valhalla_graphtile::tile_hierarchy::STANDARD_LEVELS;
 use valhalla_graphtile::tile_provider::{
     DirectoryGraphTileProvider, GraphTileProvider, GraphTileProviderError, OwnedGraphTileProvider,
@@ -273,18 +273,12 @@ fn export_edges_for_tile<W: Write>(
         }
 
         // Get the opposing edge
-        let opposing_edge_id = match tile.get_opp_edge_index(edge_id) {
-            Ok(opp_edge_id) => edge_id.with_index(opp_edge_id as u64)?,
-            Err(LookupError::InvalidIndex) => {
-                return Err(LookupError::InvalidIndex)?;
-            }
-            Err(LookupError::MismatchedBase) => reader.get_opposing_edge(edge_id)?,
-        };
+        let opposing_edge_id = reader.get_opposing_edge(edge_id, tile.borrow_dependent())?;
         progress_bar.as_ref().inspect(|bar| bar.inc(1));
         if let Some(offset) = tile_set.get(&opposing_edge_id.tile_base_id()) {
             pe.insert(offset + opposing_edge_id.index() as usize);
         } else {
-            // This happens in extracts, but shouldn't for the planet...
+            // This *could* happen in extracts, but shouldn't for the planet...
             warn!("Missing opposite edge {} in tile set", opposing_edge_id);
         }
 

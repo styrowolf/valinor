@@ -74,3 +74,4 @@ tippecanoe -at -P -o valhalla.pmtiles --extend-zooms-if-still-dropping tiles-jso
     - Could *not* use Tippecanoe effectively AFAIK
     - [parquet-wasm](https://github.com/kylebarron/parquet-wasm) is a thing... looks like a fair bit of work though
     - Something like [this](https://github.com/sfomuseum/go-geoparquet-show)?
+  - I did some experiments in another repo with FlatGeoBuf, and that's WAY faster. Let's do that!

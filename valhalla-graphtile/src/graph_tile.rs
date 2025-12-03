@@ -105,7 +105,7 @@ pub enum GraphTileBuildError {
 pub enum LookupError {
     #[error("Mismatched base; the graph ID cannot exist in this tile.")]
     MismatchedBase,
-    #[error("The feature at the index specified does not exist in this tile.")]
+    #[error("The feature base graph ID matches this tile, but the index is invalid.")]
     InvalidIndex,
 }
 
@@ -160,12 +160,17 @@ pub trait GraphTile {
     /// or the index is invalid.
     fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError>;
 
-    /// Gets the index for the opposing index of a directed edge.
+    /// Gets an index which can be used to retrieve the opposing edge for a given graph ID.
+    ///
+    /// As long as the original graph_id can exist within the tile,
+    /// this method will return an index, even if it exists in another tile.
+    /// However, access to other tiles is required to actually get the edge,
+    /// or create an unambiguous [`GraphID`].
     ///
     /// # Errors
     ///
     /// Returns a [`LookupError`] if the graph ID is not present in the tile.
-    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError>;
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<OpposingEdgeIndex, LookupError>;
 
     /// Gets a reference to an extended directed edge in this tile by graph ID.
     ///
@@ -460,7 +465,7 @@ impl GraphTile for OwnedGraphTileHandle {
     }
 
     #[inline]
-    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError> {
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<OpposingEdgeIndex, LookupError> {
         self.borrow_dependent().get_opp_edge_index(graph_id)
     }
 
@@ -613,17 +618,17 @@ impl GraphTile for GraphTileView<'_> {
         }
     }
 
-    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<u32, LookupError> {
+    fn get_opp_edge_index(&self, graph_id: GraphId) -> Result<OpposingEdgeIndex, LookupError> {
         let edge = self.get_directed_edge(graph_id)?;
 
         // The edge might leave the tile, so we have to do a complicated lookup
         let end_node_id = edge.end_node_id();
-        let opp_edge_index = edge.opposing_edge_index();
+        let opposing_edge_index = edge.opposing_edge_index();
 
-        // TODO: Probably a cleaner pattern here?
-        let node_edge_index = self.get_node(end_node_id).map(NodeInfo::edge_index)?;
-
-        Ok(node_edge_index + opp_edge_index)
+        Ok(OpposingEdgeIndex {
+            end_node_id,
+            opposing_edge_index,
+        })
     }
 
     fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError> {
@@ -978,6 +983,16 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
     }
 }
 
+/// A pair which can be used to get an opposing edge from a graph tile provider.
+pub struct OpposingEdgeIndex {
+    /// The ID of the end node.
+    ///
+    /// NOTE: This might be in another tile from the original edge!
+    pub(crate) end_node_id: GraphId,
+    /// The index of the opposing directed edge at the end node of this directed edge.
+    pub(crate) opposing_edge_index: u32,
+}
+
 #[cfg(test)]
 const TEST_GRAPH_TILE_ID_L0: GraphId = unsafe { GraphId::from_components_unchecked(0, 3015, 0) };
 #[cfg(test)]
@@ -1038,6 +1053,7 @@ static TEST_GRAPH_TILE_WITH_FLOW: LazyLock<OwnedGraphTileHandle> = LazyLock::new
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::Access;
     use crate::graph_tile::predicted_speeds::BUCKETS_PER_WEEK;
     use crate::graph_tile::{
@@ -1051,14 +1067,26 @@ mod tests {
         let tile = &*TEST_GRAPH_TILE_L0;
 
         let edges: Vec<_> = (0..u64::from(tile.header().directed_edge_count()))
-            .map(|index| {
+            .flat_map(|index| {
                 let edge_id = TEST_GRAPH_TILE_ID_L0
                     .with_index(index)
                     .expect("Invalid graph ID.");
-                let opp_edge_index = tile
+                let OpposingEdgeIndex {
+                    end_node_id,
+                    opposing_edge_index,
+                } = tile
                     .get_opp_edge_index(edge_id)
                     .expect("Unable to get opp edge index.");
-                opp_edge_index
+
+                // Currently the fixture has no edges exiting the tile, but we play it safe.
+                if let Ok(node) = tile.get_node(end_node_id) {
+                    // This is not the way you'd normally want to build these up;
+                    // you should use GraphTileProvider's convenience methods almost all the time.
+                    // This just makes the test independent and self-contained using only tile methods.
+                    Some(node.edge_index() + opposing_edge_index)
+                } else {
+                    None
+                }
             })
             .collect();
 
