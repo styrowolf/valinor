@@ -6,8 +6,11 @@
 use crate::traffic_tile::TrafficSpeedBuilderError::{SectionLengthExceedsEdge, TooManySegments};
 use bitfield_struct::bitfield;
 use nutype::nutype;
-use serde::ser::SerializeStruct;
-use serde::{Serialize, Serializer};
+#[cfg(feature = "serde")]
+use serde::{
+    ser::SerializeStruct,
+    Serialize, Serializer
+};
 use thiserror::Error;
 use zerocopy::{LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
@@ -117,7 +120,8 @@ impl SpeedValue {
 pub struct CongestionValue(u8);
 
 /// The traffic conditions along a single segment in a traffic tile.
-#[derive(Eq, PartialEq, Copy, Clone, Debug, Serialize)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum SegmentTrafficInfo {
     /// There is no data for this segment.
     ///
@@ -354,6 +358,7 @@ impl TrafficSpeed {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for TrafficSpeed {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
