@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
         let progress_bar = PROGRESS_STYLE.get().map(|style| {
             let bar = ProgressBar::new(u64::from(n_tiles));
             bar.set_message(format!(
-                "Scanning {n_tiles} tiles in level {}...",
+                "Scanning tiles in level {}...",
                 level.level
             ));
             bar.set_style(style.clone());
@@ -148,7 +148,6 @@ fn main() -> anyhow::Result<()> {
     let tile_set = tile_set;
 
     // An efficient way of tracking whether we've seen an edge before
-    // FIXME: Only works on 64-bit (or higher?) platforms
     // TODO: Does this crate actually work for 64-bit values? I also have some doubts about efficiency.
     // TODO: Should we ever export nodes too in certain cases? Ex: a bollard on an otherwise driveable road?
     let processed_edges = Mutex::new(BitSet::with_capacity(edge_count));
@@ -171,13 +170,11 @@ fn main() -> anyhow::Result<()> {
     let out_dir = cli.output_dir.clone();
 
     // Iterate over the tiles and export edges
+    let reader = DirectoryGraphTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
+
     tile_set
         .par_iter()
         .try_for_each(|(tile_id, edge_index_offset)| {
-            // NOTE: We can't share readers across threads (at least for now)
-            let reader =
-                DirectoryGraphTileProvider::new(tile_path.clone(), NonZeroUsize::new(25).unwrap());
-
             let tile = reader.get_handle_for_tile_containing(*tile_id)?;
 
             // Create a base writer to either stdout or a file with appropriate extension
