@@ -61,7 +61,7 @@ pub trait GraphTileProvider {
     /// This operation may fail for several reasons,
     /// including the tile not existing, I/O errors, and more.
     /// Refer to [`GraphTileProviderError`] for details.
-    fn with_tile<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    fn with_tile_containing<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
     where
         F: FnOnce(&GraphTileView) -> T;
 
@@ -82,7 +82,7 @@ pub trait GraphTileProvider {
     /// since some use cases involve use in contexts where failure is not encodable
     /// in the type signature.
     ///
-    /// Uses [`GraphTileProvider::with_tile`] under the hood.
+    /// Uses [`GraphTileProvider::with_tile_containing`] under the hood.
     ///
     /// # Panics
     ///
@@ -91,7 +91,7 @@ pub trait GraphTileProvider {
     where
         F: FnOnce(&GraphTileView) -> T,
     {
-        self.with_tile(graph_id, process)
+        self.with_tile_containing(graph_id, process)
             .expect("Should be able to get a tile for this node (either the trait impl is incorrect or a tile has invalid data)")
     }
 
@@ -125,7 +125,7 @@ pub trait GraphTileProvider {
                 .graph_id()
                 .with_index(u64::from(node_edge_idx + opposing_edge_index))?),
             // Slow path: fetch from another tile
-            Err(LookupError::MismatchedBase) => self.with_tile(end_node_id, |tile| {
+            Err(LookupError::MismatchedBase) => self.with_tile_containing(end_node_id, |tile| {
                 let node_edge_idx = tile.get_node(end_node_id)?.edge_index();
                 Ok(tile
                     .header()
@@ -173,7 +173,7 @@ pub trait GraphTileProvider {
             Ok(edge_id) => Ok(edge_id),
             // Slow path (need to fetch an edge outside the tile)
             Err(GraphTileProviderError::GraphTileLookupError(LookupError::MismatchedBase)) => {
-                self.with_tile(graph_id, |tile| get_opp_edge_id_from_tile(tile))?
+                self.with_tile_containing(graph_id, |tile| get_opp_edge_id_from_tile(tile))?
             }
             e => e,
         }
@@ -223,7 +223,7 @@ pub trait GraphTileProvider {
                 Ok((cont, saw_shortcut))
             };
 
-        self.with_tile(id, |tile| {
+        self.with_tile_containing(id, |tile| {
             if tile.get_directed_edge(id).map(|e| e.is_shortcut())? {
                 // If this edge is already a shortcut, return it as-is.
                 return Ok(Some(id));
@@ -244,7 +244,7 @@ pub trait GraphTileProvider {
                     // The initial case will use the opposing directed edge
                     // from the starting edge (see pre-loop code).
                     let (opp_index, _) =
-                        self.with_tile(cont_de_id.expect("continuing edge must exist"), |tile| {
+                        self.with_tile_containing(cont_de_id.expect("continuing edge must exist"), |tile| {
                             let de = tile.get_directed_edge(cont_de_id.unwrap())?;
                             Ok::<_, GraphTileProviderError>((
                                 de.opposing_edge_index(),
@@ -260,7 +260,7 @@ pub trait GraphTileProvider {
                         }
                         Err(_) => {
                             // Slow path (need to load another tile)
-                            self.with_tile(node_id, |tile| {
+                            self.with_tile_containing(node_id, |tile| {
                                 let node = tile.get_node(node_id)?;
                                 let skip_edge_index = node.edge_index() + opp_index;
                                 Ok::<_, GraphTileProviderError>(find_continuing_edge(
@@ -293,7 +293,7 @@ pub trait GraphTileProvider {
                 let (end_node_id, opp_index) = match tile.get_directed_edge(curr_cont_id) {
                     Ok(de) => (de.end_node_id(), de.opposing_edge_index()),
                     Err(LookupError::MismatchedBase) => {
-                        self.with_tile(curr_cont_id, |tile| {
+                        self.with_tile_containing(curr_cont_id, |tile| {
                             let de = tile.get_directed_edge(curr_cont_id)?;
                             Ok::<_, GraphTileProviderError>((
                                 de.end_node_id(),
@@ -307,7 +307,7 @@ pub trait GraphTileProvider {
                 // Get the node info (may reside in a different tile if the edge leaves tile)
                 let node_edge_index = match tile.get_node(end_node_id) {
                     Ok(node) => node.edge_index(),
-                    Err(LookupError::MismatchedBase) => self.with_tile(end_node_id, |tile| {
+                    Err(LookupError::MismatchedBase) => self.with_tile_containing(end_node_id, |tile| {
                         tile.get_node(end_node_id).map(NodeInfo::edge_index)
                     })??,
                     Err(e) => return Err(e.into()),
@@ -321,7 +321,7 @@ pub trait GraphTileProvider {
                 let superseded_idx = match tile.get_directed_edge(arriving_edge_id) {
                     Ok(de) => de.superseded_index(),
                     Err(LookupError::MismatchedBase) => {
-                        self.with_tile(arriving_edge_id, |tile| {
+                        self.with_tile_containing(arriving_edge_id, |tile| {
                             let de = tile.get_directed_edge(arriving_edge_id)?;
                             Ok::<_, GraphTileProviderError>(de.superseded_index())
                         })??

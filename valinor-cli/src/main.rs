@@ -102,7 +102,7 @@ fn pretty_print_edge_info<T: GraphTileProvider>(
     traffic_provider: Option<&TrafficTileProvider<false>>,
     gid: GraphId,
 ) -> anyhow::Result<()> {
-    let output = provider.with_tile(gid, |tile| {
+    let output = provider.with_tile_containing(gid, |tile| {
         let edge = tile.get_directed_edge(gid)?;
         let edge_info = tile.get_edge_info(edge)?;
         let traffic_info = traffic_provider.map(|tp| unsafe { tp.get_speeds_for_edge(gid).ok() });

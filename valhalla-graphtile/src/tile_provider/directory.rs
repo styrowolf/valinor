@@ -130,7 +130,7 @@ impl DirectoryGraphTileProvider {
 }
 
 impl GraphTileProvider for DirectoryGraphTileProvider {
-    fn with_tile<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    fn with_tile_containing<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
     where
         F: FnOnce(&GraphTileView) -> T,
     {

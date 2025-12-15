@@ -138,7 +138,7 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
 }
 
 impl<const MUT: bool> GraphTileProvider for TarballTileProvider<MUT> {
-    fn with_tile<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    fn with_tile_containing<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
     where
         F: FnOnce(&GraphTileView) -> T,
     {
