@@ -1,0 +1,10 @@
+[package]
+name = "valinor-sif"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+valhalla-graphtile = { version = "0.1.0", path = "../valhalla-graphtile" }
+
+[lints]
+workspace = true
