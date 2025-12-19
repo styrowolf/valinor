@@ -116,10 +116,7 @@ fn main() -> anyhow::Result<()> {
 
         let progress_bar = PROGRESS_STYLE.get().map(|style| {
             let bar = ProgressBar::new(u64::from(n_tiles));
-            bar.set_message(format!(
-                "Scanning tiles in level {}...",
-                level.level
-            ));
+            bar.set_message(format!("Scanning tiles in level {}...", level.level));
             bar.set_style(style.clone());
             bar
         });
@@ -299,7 +296,12 @@ fn export_edges_for_tile<W: Write>(
         //   - Find which edge is "forward"
         //   - Omit forward field
         //   - Check if any difference in edge + opp edge tagging; I'd expect reversed access; anything else? Can test this...
-        let record = EdgeRecord::new(&STANDARD_LEVELS[tile_id.level() as usize], edge, edge_info)?;
+        let record = EdgeRecord::new(
+            &STANDARD_LEVELS[tile_id.level() as usize],
+            edge_id,
+            edge,
+            edge_info,
+        )?;
         serde_json::to_writer(&mut writer, &record)?;
         writer.write(&['\n' as u8])?;
     }

@@ -1,8 +1,8 @@
 use geo::LineString;
 use serde::Serialize;
-use valhalla_graphtile::RoadClass;
 use valhalla_graphtile::graph_tile::{DirectedEdge, EdgeInfo};
 use valhalla_graphtile::tile_hierarchy::TileLevel;
+use valhalla_graphtile::{GraphId, RoadClass};
 
 #[derive(Serialize)]
 struct Tippecanoe {
@@ -50,6 +50,7 @@ impl From<&LineString> for Geometry {
 
 #[derive(Serialize)]
 struct EdgeProperties<'a> {
+    edge_id: u64, // TODO: should we implement Serialize on GraphId instead?
     #[serde(flatten)]
     edge: &'a DirectedEdge,
     #[serde(flatten)]
@@ -57,8 +58,16 @@ struct EdgeProperties<'a> {
 }
 
 impl EdgeProperties<'_> {
-    fn new<'a>(edge: &'a DirectedEdge, edge_info: EdgeInfo<'a>) -> EdgeProperties<'a> {
-        EdgeProperties { edge, edge_info }
+    fn new<'a>(
+        edge_id: GraphId,
+        edge: &'a DirectedEdge,
+        edge_info: EdgeInfo<'a>,
+    ) -> EdgeProperties<'a> {
+        EdgeProperties {
+            edge_id: edge_id.value(),
+            edge,
+            edge_info,
+        }
     }
 }
 
@@ -75,6 +84,7 @@ pub struct EdgeRecord<'a> {
 impl EdgeRecord<'_> {
     pub fn new<'a>(
         tile_level: &TileLevel,
+        edge_id: GraphId,
         edge: &'a DirectedEdge,
         edge_info: EdgeInfo<'a>,
     ) -> Result<EdgeRecord<'a>, anyhow::Error> {
@@ -84,7 +94,7 @@ impl EdgeRecord<'_> {
             // Note: it doesn't matter if the edge info is forward or reversed in our usage;
             // we're just generating display maps.
             geometry: Geometry::from(&LineString::new(edge_info.decode_raw_shape()?)),
-            properties: EdgeProperties::new(edge, edge_info),
+            properties: EdgeProperties::new(edge_id, edge, edge_info),
         })
     }
 }
