@@ -10,6 +10,7 @@ members = [
     "valhalla-response",
     "valinor-cli",
     "valinor-export-graph",
+    "valinor-sif"
 ]
 
 [workspace.dependencies]
