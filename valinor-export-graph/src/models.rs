@@ -18,7 +18,7 @@ impl From<(&TileLevel, bool, RoadClass)> for Tippecanoe {
             min_zoom: std::cmp::min(
                 12,
                 level.tiling_system.min_zoom()
-                    + match &level.minimum_road_class.discriminant() - road_class.discriminant() {
+                    + match u8::overflowing_sub(level.minimum_road_class.discriminant(), road_class.discriminant()).0 {
                         0 => 2,
                         1 => 1,
                         2.. => 0,
