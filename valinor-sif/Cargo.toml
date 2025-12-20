@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-valhalla-graphtile = { version = "0.1.0", path = "../valhalla-graphtile" }
+pathfinding = "4.14.0"
+serde_json.workspace = true
+valhalla-graphtile = { path = "../valhalla-graphtile", features = ["serde"] }
 
 [lints]
 workspace = true
