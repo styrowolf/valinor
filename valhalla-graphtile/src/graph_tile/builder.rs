@@ -6,7 +6,7 @@ use super::{
 use crate::GraphId;
 use crate::graph_tile::header::{GraphTileHeaderBuilder, VERSION_LEN};
 use crate::graph_tile::predicted_speeds::{
-    BUCKETS_PER_WEEK, COEFFICIENT_COUNT, compress_speed_buckets, decode_compressed_speeds,
+    BUCKETS_PER_WEEK, COEFFICIENT_COUNT, compress_speed_buckets, decode_base64_speed_coefficients,
 };
 use chrono::{DateTime, Utc};
 use geo::Coord;
@@ -218,7 +218,21 @@ impl GraphTileBuilder<'_> {
         Ok(result)
     }
 
-    fn with_compressed_speeds(
+    /// Adds predicted speeds to a directed edge using pre-encoded DCT-II coefficients.
+    ///
+    /// This method is probably the least ergonomic in the family of predicted speed APIs,
+    /// but it's also the most efficient (if you can use it directly)
+    /// since it doesn't need to do any format shifting.
+    /// All other predicted speed methods are convenience wrappers around this.
+    ///
+    /// See the [`crate::graph_tile::predicted_speeds`] module for more details
+    /// on predicted speeds.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the directed edge index is invalid,
+    /// or you somehow managed to add more than 2 billion speed profiles to a single tile.
+    pub fn with_predicted_speed_coefficients(
         self,
         directed_edge_index: usize,
         coefficients: &[i16; COEFFICIENT_COUNT],
@@ -251,7 +265,13 @@ impl GraphTileBuilder<'_> {
         Ok(result)
     }
 
-    /// Adds predicted speeds to a directed edge from a compressed speed string.
+    /// Adds predicted speeds to a directed edge from a base64 encoded string
+    /// containing the DCT-II coefficients.
+    ///
+    /// This is slightly less efficient than directly setting the coefficients using
+    /// [`with_predicted_speed_coefficients`](GraphTileBuilder::with_predicted_speed_coefficients),
+    /// but if you're working with text files or some other situation where you'd prefer not to use binary data,
+    /// base64 encoding is a happy middle ground.
     ///
     /// See the [`crate::graph_tile::predicted_speeds`] module for more details
     /// on predicted speeds.
@@ -266,9 +286,9 @@ impl GraphTileBuilder<'_> {
         directed_edge_index: usize,
         compressed_speeds: &str,
     ) -> Result<Self, GraphTileBuildError> {
-        self.with_compressed_speeds(
+        self.with_predicted_speed_coefficients(
             directed_edge_index,
-            &decode_compressed_speeds(compressed_speeds)?,
+            &decode_base64_speed_coefficients(compressed_speeds)?,
         )
     }
 
@@ -287,7 +307,7 @@ impl GraphTileBuilder<'_> {
         directed_edge_index: usize,
         speeds: &[f32; BUCKETS_PER_WEEK],
     ) -> Result<Self, GraphTileBuildError> {
-        self.with_compressed_speeds(directed_edge_index, &compress_speed_buckets(speeds))
+        self.with_predicted_speed_coefficients(directed_edge_index, &compress_speed_buckets(speeds))
     }
 
     fn grow_predicted_speeds_if_needed(self, force_create_offsets_array: bool) -> Self {

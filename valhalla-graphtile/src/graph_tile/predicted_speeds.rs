@@ -173,7 +173,7 @@ pub fn encode_compressed_speeds(coefficients: &[i16; COEFFICIENT_COUNT]) -> Stri
 /// # Errors
 ///
 /// Fails if the decoded byte length != 400.
-pub fn decode_compressed_speeds(
+pub fn decode_base64_speed_coefficients(
     encoded: &str,
 ) -> Result<[i16; COEFFICIENT_COUNT], PredictedSpeedCodecError> {
     let raw = STANDARD.decode(encoded.as_bytes())?;
@@ -473,7 +473,7 @@ mod tests {
             coeffs[i] = (i as i16) + 1000;
         }
         let enc = encode_compressed_speeds(&coeffs);
-        let dec = decode_compressed_speeds(&enc).unwrap();
+        let dec = decode_base64_speed_coefficients(&enc).unwrap();
         assert_eq!(coeffs, dec);
     }
 
@@ -499,7 +499,7 @@ mod tests {
     fn test_decoding() {
         let encoded_speed = "BcUACQAEACEADP/7/9sAGf/fAAwAGwARAAX/+AAAAB0AFAAS//AAF//+ACwACQAqAAAAKP/6AEMABABsAAsBBAAq/rcAAP+bAAz/zv/s/9MABf/Y//X/8//9/+wACf/P//EADv/8//L//P/y//H////7AAwAFf/5//oADgAZAAQAFf/3/+8AB//yAB8ABv/0AAUAEf/8//QAFAAG//b////j//v//QAT//7/+f/kABMABwABAAv/6//8//cAEwAAABT/8v/6//wAAAAQ//cACwAFAAT/1//sAAEADAABAAYAE//9AAn/7gAH/+AAFQAB//4AC//o/+gAE//+AAAAFf/l//kABP/+//kACAAG//cAHv/qAB0AAv/4/+v/+wALAAMABP/3AAT/8wAIAAr/9wAK//j/+wAEAAD/+P/8//v/8f/2//L//AALAAcABgAG//gAAv/5AAoAHv//AAcAFf/zABD/7AAUAAv/7v/8AAgACAAN//0ADP/iABD/9f/3//7/+P/3AAQADP//AAMABw==";
 
-        let coeffs = decode_compressed_speeds(encoded_speed)
+        let coeffs = decode_base64_speed_coefficients(encoded_speed)
             .expect("Failed to decode coefficients")
             .map(|c| c.into());
 
@@ -672,7 +672,7 @@ mod tests {
         fn negative_speeds_correct_fixture() {
             let encoded_speed = "BG7/9QAQAAL/7gAD//r/+AADAAUAD//3AAcAAf/gAB3/7AALAAf//QAZABgADv//AA0AAv/3/+YABQAKABMABv/y//b//wAL//UAEwAAAAYAFf/3//T//QAAABAAAgAC//r////2AAkABwAJ//MABAADAAL/+gAJ//b/+wANABUAEP/5AAMABwAJ//b/+AAHAAcAAAAG//0AB//5AAz/+QAQAAT/+v//AAwAAP/0AA3/8P/tAAr/8QAT//sACQABAAX/9//4AAH//P/p//L/8wAA//oAEv/8ABMAFf//AAUAAwAa//YAB///AAj/+wAK//kABv/yAA4ABgAO//kAAwAI////9P/uAAf/8//5//3/+f/1//T//QADAA///f/yAAD//wAK////+AACAAcAA//9AAsABwAUAAD//wAE/+8AAgAQAAz/7f/1AAL/+P/+/+0AGP/7AAD/+wAL//r//QAHAAAACgAGAAwABv/4//cABf/3//v//QAM/+wADAAH/+//7f//AAwAEAAKAAX/+g==";
 
-            let coeffs = decode_compressed_speeds(encoded_speed)
+            let coeffs = decode_base64_speed_coefficients(encoded_speed)
                 .expect("Failed to decode coefficients")
                 .map(|c| c.into());
 
@@ -754,7 +754,7 @@ mod tests {
                 };
             }
 
-            let decoded = decode_compressed_speeds(expected_encoded).expect("decode ok");
+            let decoded = decode_base64_speed_coefficients(expected_encoded).expect("decode ok");
             assert_eq!(decoded, expected_coeffs, "Incorrect decoded coefficients");
         }
     }
