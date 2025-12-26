@@ -16,7 +16,6 @@ members = [
 anyhow = "1.0.89"
 base64 = "0.22.1"
 bitfield-struct = "0.12.1"
-bit-set = "0.8.0"
 bit-twiddling-helpers = { path = "bit-twiddling-helpers" }
 chrono = "0.4.42"
 clap = { version = "4.5.45", features = ["derive", "env"] }

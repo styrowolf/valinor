@@ -61,7 +61,11 @@ pub trait GraphTileProvider {
     /// This operation may fail for several reasons,
     /// including the tile not existing, I/O errors, and more.
     /// Refer to [`GraphTileProviderError`] for details.
-    fn with_tile_containing<F, T>(&self, graph_id: GraphId, process: F) -> Result<T, GraphTileProviderError>
+    fn with_tile_containing<F, T>(
+        &self,
+        graph_id: GraphId,
+        process: F,
+    ) -> Result<T, GraphTileProviderError>
     where
         F: FnOnce(&GraphTileView) -> T;
 
@@ -243,14 +247,16 @@ pub trait GraphTileProvider {
                     // get the continuing directed edge.
                     // The initial case will use the opposing directed edge
                     // from the starting edge (see pre-loop code).
-                    let (opp_index, _) =
-                        self.with_tile_containing(cont_de_id.expect("continuing edge must exist"), |tile| {
+                    let (opp_index, _) = self.with_tile_containing(
+                        cont_de_id.expect("continuing edge must exist"),
+                        |tile| {
                             let de = tile.get_directed_edge(cont_de_id.unwrap())?;
                             Ok::<_, GraphTileProviderError>((
                                 de.opposing_edge_index(),
                                 de.end_node_id(),
                             ))
-                        })??;
+                        },
+                    )??;
 
                     let (next_cont, saw_short) = match tile.get_node(node_id) {
                         Ok(node) => {
@@ -307,9 +313,10 @@ pub trait GraphTileProvider {
                 // Get the node info (may reside in a different tile if the edge leaves tile)
                 let node_edge_index = match tile.get_node(end_node_id) {
                     Ok(node) => node.edge_index(),
-                    Err(LookupError::MismatchedBase) => self.with_tile_containing(end_node_id, |tile| {
-                        tile.get_node(end_node_id).map(NodeInfo::edge_index)
-                    })??,
+                    Err(LookupError::MismatchedBase) => self
+                        .with_tile_containing(end_node_id, |tile| {
+                            tile.get_node(end_node_id).map(NodeInfo::edge_index)
+                        })??,
                     Err(e) => return Err(e.into()),
                 };
 

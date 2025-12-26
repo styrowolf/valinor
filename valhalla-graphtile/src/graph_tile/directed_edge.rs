@@ -73,7 +73,7 @@ struct ThirdBitfield {
     #[bits(8)]
     name_consistency: u8,
     #[bits(6)]
-    edge_use: RoadUse,
+    road_use: RoadUse,
     #[bits(4)]
     lane_count: u8,
     #[bits(4)]
@@ -295,7 +295,7 @@ impl DirectedEdge {
             // Already a shortcut!
             return false;
         }
-        match self.edge_use() {
+        match self.road_use() {
             // Cannot be related to transit
             RoadUse::TransitConnection
             | RoadUse::PlatformConnection
@@ -411,18 +411,18 @@ impl DirectedEdge {
 
     /// The way the edge is used.
     #[inline]
-    pub const fn edge_use(&self) -> RoadUse {
-        self.third_bitfield.edge_use()
+    pub const fn road_use(&self) -> RoadUse {
+        self.third_bitfield.road_use()
     }
 
     /// Is this a transit line (bus or rail)?
     ///
     /// # Panics
     ///
-    /// Can panic as a result of the issues noted in [`Self::edge_use`].
+    /// Can panic as a result of the issues noted in [`Self::road_use`].
     #[inline]
     pub fn is_transit_line(&self) -> bool {
-        let edge_use = self.edge_use();
+        let edge_use = self.road_use();
         edge_use == RoadUse::Rail || edge_use == RoadUse::Bus
     }
 
@@ -558,7 +558,7 @@ impl Serialize for DirectedEdge {
         state.serialize_field("constrained_flow_speed", &self.constrained_flow_speed())?;
 
         // TODO: Name consistency
-        state.serialize_field("use", &self.edge_use())?;
+        state.serialize_field("use", &self.road_use())?;
         state.serialize_field("lane_count", &self.lane_count())?;
         state.serialize_field("density", &self.density())?;
         state.serialize_field("classification", &self.classification())?;

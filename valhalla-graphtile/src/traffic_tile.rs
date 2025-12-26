@@ -7,10 +7,7 @@ use crate::traffic_tile::TrafficSpeedBuilderError::{SectionLengthExceedsEdge, To
 use bitfield_struct::bitfield;
 use nutype::nutype;
 #[cfg(feature = "serde")]
-use serde::{
-    ser::SerializeStruct,
-    Serialize, Serializer
-};
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use thiserror::Error;
 use zerocopy::{LE, U32, U64};
 use zerocopy_derive::{FromBytes, Immutable, IntoBytes, Unaligned};
