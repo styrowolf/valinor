@@ -8,7 +8,7 @@ authors = ["Ian Wagner <ian@stadiamaps.com>"]
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-flatgeobuf = "5.0.0"
+flatgeobuf = { version = "5.0.0", default-features = false }
 geozero = { workspace = true }
 indicatif = { workspace = true }
 serde_json = { workspace = true }
