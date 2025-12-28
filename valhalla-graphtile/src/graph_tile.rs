@@ -116,8 +116,8 @@ pub trait GraphTile {
     /// Does the supplied graph ID belong in this tile?
     ///
     /// A true result does not necessarily guarantee that an object with this ID exists,
-    /// but in that case, either you've cooked up an invalid ID for fun,
-    /// or the graph is invalid.
+    /// but in that case, either you've probably, cooked up an invalid ID for fun,
+    /// the graph tiles are invalid, or you've confused a graph ID and a node ID.
     fn may_contain_id(&self, id: GraphId) -> bool;
 
     /// Gets a reference to the [`GraphTileHeader`].
@@ -586,7 +586,7 @@ impl GraphTile for GraphTileView<'_> {
     fn get_node(&self, id: GraphId) -> Result<&NodeInfo, LookupError> {
         if self.may_contain_id(id) {
             self.nodes
-                .get(id.index() as usize)
+                .get(id.feature_index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -611,7 +611,7 @@ impl GraphTile for GraphTileView<'_> {
     fn get_directed_edge(&self, id: GraphId) -> Result<&DirectedEdge, LookupError> {
         if self.may_contain_id(id) {
             self.directed_edges
-                .get(id.index() as usize)
+                .get(id.feature_index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -634,7 +634,7 @@ impl GraphTile for GraphTileView<'_> {
     fn get_ext_directed_edge(&self, id: GraphId) -> Result<&DirectedEdgeExt, LookupError> {
         if self.may_contain_id(id) {
             self.ext_directed_edges
-                .get(id.index() as usize)
+                .get(id.feature_index() as usize)
                 .ok_or(LookupError::InvalidIndex)
         } else {
             Err(LookupError::MismatchedBase)
@@ -1070,7 +1070,7 @@ mod tests {
         let edges: Vec<_> = (0..u64::from(tile.header().directed_edge_count()))
             .flat_map(|index| {
                 let edge_id = TEST_GRAPH_TILE_ID_L0
-                    .with_index(index)
+                    .with_feature_index(index)
                     .expect("Invalid graph ID.");
                 let OpposingEdgeIndex {
                     end_node_id,

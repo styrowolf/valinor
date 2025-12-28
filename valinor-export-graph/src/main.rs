@@ -180,7 +180,7 @@ fn export_edges_for_tile(
 ) -> anyhow::Result<()> {
     for index in 0..tile.header().directed_edge_count() as usize {
         // Get the edge
-        let edge_id = tile_id.with_index(index as u64)?;
+        let edge_id = tile_id.with_feature_index(index as u64)?;
         let edge = tile.get_directed_edge(edge_id)?;
 
         progress_bar.as_ref().inspect(|bar| bar.inc(1));

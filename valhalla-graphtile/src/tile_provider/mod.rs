@@ -124,14 +124,14 @@ pub trait GraphTileProvider {
             Ok(node_edge_idx) => Ok(tile_hint
                 .header()
                 .graph_id()
-                .with_index(u64::from(node_edge_idx + opposing_edge_index))?),
+                .with_feature_index(u64::from(node_edge_idx + opposing_edge_index))?),
             // Slow path: fetch from another tile
             Err(LookupError::MismatchedBase) => self.with_tile_containing(end_node_id, |tile| {
                 let node_edge_idx = tile.get_node(end_node_id)?.edge_index();
                 Ok(tile
                     .header()
                     .graph_id()
-                    .with_index(u64::from(node_edge_idx + opposing_edge_index))?)
+                    .with_feature_index(u64::from(node_edge_idx + opposing_edge_index))?)
             })?,
             Err(e) => Err(e)?,
         }
@@ -217,7 +217,7 @@ pub trait GraphTileProvider {
                 }
 
                 let cont = if let Some(idx) = candidate {
-                    Some(tile.header().graph_id().with_index(u64::from(idx))?)
+                    Some(tile.header().graph_id().with_feature_index(u64::from(idx))?)
                 } else {
                     None
                 };
@@ -319,7 +319,7 @@ pub trait GraphTileProvider {
 
                 // Construct the opposing edge id at the end node (the edge we "arrived on" at this node)
                 let arriving_edge_id =
-                    end_node_id.with_index(u64::from(node_edge_index + opp_index))?;
+                    end_node_id.with_feature_index(u64::from(node_edge_index + opp_index))?;
 
                 // Inspect the arriving edge to see if it is superseded (i.e., shortcut starts here)
                 let superseded_idx = match tile.get_directed_edge(arriving_edge_id) {
@@ -342,7 +342,7 @@ pub trait GraphTileProvider {
                 if let Some(idx) = superseded_idx {
                     // Calculate the shortcut index within the node's outbound edges
                     let shortcut_abs_index = u64::from(node_edge_index + idx);
-                    let shortcut_id = end_node_id.with_index(shortcut_abs_index)?;
+                    let shortcut_id = end_node_id.with_feature_index(shortcut_abs_index)?;
                     return Ok(Some(shortcut_id));
                 }
 

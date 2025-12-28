@@ -38,10 +38,10 @@ pub enum InvalidGraphIdError {
 }
 
 /// An Identifier of a node or an edge within the tiled, hierarchical graph.
-/// It packs a hierarchy level, tile ID, and a unique identifier within
+/// It packs a hierarchy level, tile ID, and an identifier within
 /// the tile/level into a 64-bit integer.
 ///
-/// # Hierarchy
+/// # Hierarchy (level + Tile ID)
 ///
 /// Valhalla organizes tiles into several levels.
 /// For a description of the common ones, see [`STANDARD_LEVELS`]
@@ -52,18 +52,35 @@ pub enum InvalidGraphIdError {
 /// Each level contains square tiles of a fixed size (noted in the level definition).
 /// And within each tile, features are identified by a node or edge index.
 ///
+/// # Feature index and overloading
+///
+/// The identifier field points to a specific feature within a graph tile.
+/// The same identifier format is used for multiple features,
+/// so make sure you know which you're dealing with!
+///
+/// The feature index is simply an index of _some_ feature within a list in the tile.
+/// This struct does not encode any information on what type of feature is being referenced
+/// (e.g. and edge or node).
+///
+/// This is normally evident form the API surface, but this is not enforced at the type level.
+///
+/// ## Future ideas to explore
+///
+/// - Hiding most uses of this type from the public API and using an enum
+/// - Using the reserved area to indicate type
+///
 /// # Bit field layout
 ///
 /// Here is a lovely ANSI art diagram of the bit field layout
-/// from the Valhalla documentation.
+/// from the Valhalla documentation, lightly modified for clarity.
 ///
 /// ```text
 ///        MSb                                     LSb
 ///        ▼                                       ▼
 /// bit   64         46        25         3        0
-/// pos    ┌──────────┬─────────┬─────────┬────────┐
-///        │ RESERVED │ id      │ tileid  │ level  │
-///        └──────────┴─────────┴─────────┴────────┘
+/// pos    ┌──────────┬───────────────┬────────┬───────┐
+///        │ RESERVED │ feature index │ tileid │ level │
+///        └──────────┴───────────────┴────────┴───────┘
 /// size     18         21        22        3
 ///```
 ///
@@ -142,7 +159,7 @@ impl GraphId {
             Err(InvalidGraphIdError::Level)
         } else if result.tile_id() > MAX_GRAPH_TILE_ID {
             Err(InvalidGraphIdError::GraphTileId)
-        } else if result.index() > MAX_TILE_INDEX {
+        } else if result.feature_index() > MAX_TILE_INDEX {
             Err(InvalidGraphIdError::TileIndex)
         } else {
             Ok(result)
@@ -159,14 +176,13 @@ impl GraphId {
         Self(id)
     }
 
-    /// Creates a new graph ID from the existing one, but with a new tile index.
-    /// This is useful for indexing within a tile.
+    /// Creates a new graph ID from the existing one, but with a new feature index within the tile.
     ///
     /// # Errors
     ///
     /// See [`GraphId::try_from_components`] for a description of errors.
     #[inline]
-    pub const fn with_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
+    pub const fn with_feature_index(&self, tile_index: u64) -> Result<Self, InvalidGraphIdError> {
         Self::try_from_components(self.level(), self.tile_id(), tile_index)
     }
 
@@ -189,13 +205,14 @@ impl GraphId {
         (self.value() & 0x01ff_fff8) >> 3
     }
 
-    /// Gets the unique identifier (index) within the tile and level.
+    /// Gets the feature index within the tile.
     #[inline]
-    pub const fn index(&self) -> u64 {
+    pub const fn feature_index(&self) -> u64 {
         (self.value() & 0x3fff_fe00_0000) >> 25
     }
 
-    /// Returns a [`GraphId`] which omits the index within the level.
+    /// Returns a [`GraphId`] which omits the feature index within the tile.
+    ///
     /// This is useful primarily for deriving file names.
     #[inline]
     #[must_use]
@@ -252,7 +269,7 @@ impl Display for GraphId {
             "GraphId {}/{}/{}",
             self.level(),
             self.tile_id(),
-            self.index()
+            self.feature_index()
         ))
     }
 }
@@ -304,7 +321,7 @@ mod tests {
         assert_eq!(graph_id, GraphId(0.into()));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
-        assert_eq!(graph_id.index(), 0);
+        assert_eq!(graph_id.feature_index(), 0);
     }
 
     #[test]
@@ -323,7 +340,7 @@ mod tests {
         );
         assert_eq!(graph_id.level(), MAX_HIERARCHY_LEVEL);
         assert_eq!(graph_id.tile_id(), MAX_GRAPH_TILE_ID);
-        assert_eq!(graph_id.index(), MAX_TILE_INDEX);
+        assert_eq!(graph_id.feature_index(), MAX_TILE_INDEX);
     }
 
     #[test]
@@ -336,7 +353,7 @@ mod tests {
         assert_eq!(graph_id, GraphId(16889572344463360.into()));
         assert_eq!(graph_id.level(), 0);
         assert_eq!(graph_id.tile_id(), 0);
-        assert_eq!(graph_id.index(), 32000);
+        assert_eq!(graph_id.feature_index(), 32000);
     }
 
     #[test]

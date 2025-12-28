@@ -130,6 +130,7 @@ impl DirectoryGraphTileProvider {
 }
 
 impl GraphTileProvider for DirectoryGraphTileProvider {
+    #[inline]
     fn with_tile_containing<F, T>(
         &self,
         graph_id: GraphId,
@@ -241,7 +242,7 @@ mod test {
         // We only check a subset because it takes too long otherwise.
         let range = Uniform::try_from(0..u64::from(tile.header().directed_edge_count())).unwrap();
         for index in range.sample_iter(&mut rng).take(100) {
-            let edge_id = graph_id.with_index(index).expect("Invalid graph ID.");
+            let edge_id = graph_id.with_feature_index(index).expect("Invalid graph ID.");
             let opp_edge_index = tile
                 .get_opp_edge_index(edge_id)
                 .expect("Unable to get opp edge index.");
@@ -316,7 +317,7 @@ mod test {
             let mut unique_shortcut_ids = HashSet::new();
             for (idx, edge) in tile.directed_edges().iter().enumerate() {
                 let graph_id = base_id
-                    .with_index(idx as u64)
+                    .with_feature_index(idx as u64)
                     .unwrap();
 
                 // Property test style assertions through all edges in this (small) level zero tile

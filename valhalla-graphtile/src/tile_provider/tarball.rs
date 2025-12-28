@@ -138,6 +138,7 @@ impl<const MUT: bool> TarballTileProvider<MUT> {
 }
 
 impl<const MUT: bool> GraphTileProvider for TarballTileProvider<MUT> {
+    #[inline]
     fn with_tile_containing<F, T>(
         &self,
         graph_id: GraphId,
@@ -274,7 +275,7 @@ impl TileIndexBinEntry {
         // Therefore, this is guaranteed to be a valid Graph ID bit pattern.
         let graph_id = unsafe { GraphId::from_id_unchecked(self.tile_id.into()) };
 
-        if graph_id.index() == 0 {
+        if graph_id.feature_index() == 0 {
             Ok(graph_id)
         } else {
             Err(GraphTileProviderError::InvalidTarball(format!(

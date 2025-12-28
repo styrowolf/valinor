@@ -119,7 +119,7 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
             return Err(GraphTileProviderError::UnsupportedTileVersion);
         }
 
-        if graph_id.index() >= u64::from(header.directed_edge_count()) {
+        if graph_id.feature_index() >= u64::from(header.directed_edge_count()) {
             return Err(GraphTileProviderError::GraphTileLookupError(
                 LookupError::InvalidIndex,
             ));
@@ -131,7 +131,7 @@ impl<const MUT: bool> TrafficTileProvider<MUT> {
                 // Tile structure: header + [TileSpeed]
                 offset: tile_pointer.offsets.offset
                     + (HEADER_SIZE as u64)
-                    + (SPEED_SIZE as u64 * graph_id.index()),
+                    + (SPEED_SIZE as u64 * graph_id.feature_index()),
                 size: SPEED_SIZE as u32,
             },
         })
