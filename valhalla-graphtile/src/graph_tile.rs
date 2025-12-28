@@ -164,7 +164,7 @@ pub trait GraphTile {
     ///
     /// As long as the original graph_id can exist within the tile,
     /// this method will return an index, even if it exists in another tile.
-    /// However, access to other tiles is required to actually get the edge,
+    /// However, access to other tiles may be required to actually get the edge,
     /// or create an unambiguous [`GraphID`].
     ///
     /// # Errors
@@ -983,6 +983,7 @@ impl<'a> TryFrom<&'a [u8]> for GraphTileView<'a> {
     }
 }
 
+// TODO: Maybe this should be an enum instead?
 /// A pair which can be used to get an opposing edge from a graph tile provider.
 pub struct OpposingEdgeIndex {
     /// The ID of the end node.

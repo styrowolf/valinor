@@ -16,10 +16,7 @@ mod tarball;
 mod traffic;
 
 use crate::graph_id::InvalidGraphIdError;
-use crate::graph_tile::{
-    GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo, OpposingEdgeIndex,
-    OwnedGraphTileHandle,
-};
+use crate::graph_tile::{DirectedEdge, GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo, OpposingEdgeIndex, OwnedGraphTileHandle};
 pub use directory::DirectoryGraphTileProvider;
 pub use tarball::TarballTileProvider;
 pub use traffic::TrafficTileProvider;
@@ -158,14 +155,14 @@ pub trait GraphTileProvider {
     ///
     /// This method will try to look up the edge in the tile view (`tile_hint`) first,
     /// to save a tile fetch (which might have a high overhead in some tile providers).
-    fn get_opposing_edge(
+    fn get_opposing_edge_id(
         &self,
-        graph_id: GraphId,
+        edge_id: GraphId,
         tile_hint: &GraphTileView,
     ) -> Result<GraphId, GraphTileProviderError> {
         let get_opp_edge_id_from_tile =
             |tile: &GraphTileView| -> Result<GraphId, GraphTileProviderError> {
-                let idx = tile.get_opp_edge_index(graph_id)?;
+                let idx = tile.get_opp_edge_index(edge_id)?;
 
                 // Construct an ID with the index set to the opposing edge
                 // TODO: Should we try to return the edge too??
@@ -177,7 +174,7 @@ pub trait GraphTileProvider {
             Ok(edge_id) => Ok(edge_id),
             // Slow path (need to fetch an edge outside the tile)
             Err(GraphTileProviderError::GraphTileLookupError(LookupError::MismatchedBase)) => {
-                self.with_tile_containing(graph_id, |tile| get_opp_edge_id_from_tile(tile))?
+                self.with_tile_containing(edge_id, |tile| get_opp_edge_id_from_tile(tile))?
             }
             e => e,
         }
@@ -235,7 +232,7 @@ pub trait GraphTileProvider {
 
             // Walk backwards along the opposing directed edge until a shortcut beginning is found
             // or until ambiguity / boundary conditions are encountered.
-            let first_de_id = self.get_opposing_edge(id, tile)?;
+            let first_de_id = self.get_opposing_edge_id(id, tile)?;
             let mut cont_de_id: Option<GraphId> = Some(first_de_id);
             let mut prev_node_id: Option<GraphId> = None;
             let mut shortcut_at_node = false;

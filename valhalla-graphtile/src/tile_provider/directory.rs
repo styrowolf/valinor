@@ -250,7 +250,7 @@ mod test {
                 .expect("Unable to get the full ID for the opposing edge index!");
 
             let opp_edge_id_2 = provider
-                .get_opposing_edge(edge_id, tile.borrow_dependent())
+                .get_opposing_edge_id(edge_id, tile.borrow_dependent())
                 .expect("Unable to get opposing edge.");
             assert_eq!(opp_edge_id_1, opp_edge_id_2);
         }
