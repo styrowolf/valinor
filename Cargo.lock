@@ -2225,6 +2225,7 @@ dependencies = [
  "integer-encoding",
  "lru",
  "memmap2",
+ "num-traits",
  "num_enum",
  "nutype",
  "proptest",

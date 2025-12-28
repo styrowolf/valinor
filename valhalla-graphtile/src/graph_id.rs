@@ -68,6 +68,8 @@ pub enum InvalidGraphIdError {
 ///
 /// - Hiding most uses of this type from the public API and using an enum
 /// - Using the reserved area to indicate type
+///   (NOTE: This would probably be a Valinor-only change if we did this short term,
+///   since it would be a breaking change.)
 ///
 /// # Bit field layout
 ///

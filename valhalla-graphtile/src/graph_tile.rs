@@ -305,7 +305,7 @@ pub trait GraphTile {
                 let nc_lat = nc.y;
 
                 if !approximator
-                    .is_within_distance_of(coord! {x: nc_lon, y: nc_lat}, radius_in_meters)
+                    .is_probably_within_distance_of(coord! {x: nc_lon, y: nc_lat}, radius_in_meters)
                 {
                     return None;
                 }

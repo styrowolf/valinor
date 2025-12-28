@@ -28,6 +28,7 @@ insta = { version = "1.40.0", features = ["yaml"] }
 itertools = "0.14.0"
 lru = "0.16.0"
 memmap2 = "0.9.9"
+num-traits = "0.2"
 num_enum = "0.7.5"
 nutype = { version = "0.6.2" }
 proptest = "1.8.0"
