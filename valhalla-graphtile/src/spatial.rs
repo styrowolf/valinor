@@ -2,7 +2,7 @@
 
 use geo::{Coord, Destination, Haversine, Point};
 
-const METERS_PER_DEGREE_LAT: f64 = 111_132.954;
+const METERS_PER_DEGREE_LAT: f32 = 111_132.954;
 
 /// Returns a bounding box centered upon `center` containing a circle with radius `radius` meters.
 ///
@@ -31,14 +31,15 @@ pub fn bbox_with_center(center: Point, radius: f64) -> (f64, f64, f64, f64) {
 /// * Always over-estimates the distance.
 /// * Expected range of overestimation is 5% or less for short distances (a few hundred meters).
 pub struct DistanceApproximator {
-    center: Coord<f64>,
-    meters_per_lon_degree: f64,
+    // TODO: Would be nice if we could support f32 as well
+    center: Coord<f32>,
+    meters_per_lon_degree: f32,
 }
 
 impl DistanceApproximator {
     /// Create a new approximator centered on the given point.
     #[inline]
-    pub fn new(center: Coord<f64>) -> Self {
+    pub fn new(center: Coord<f32>) -> Self {
         let lon_scale = center.y.to_radians().cos();
         Self {
             center,
@@ -55,7 +56,7 @@ impl DistanceApproximator {
     /// Compare against `max_distance * max_distance` (to avoid `sqrt` in your code),
     /// or else use the [`DistanceApproximator::is_within_distance_of`] helper.
     #[inline]
-    pub fn distance_squared(&self, other: Coord<f64>) -> f64 {
+    pub fn distance_squared(&self, other: Coord<f32>) -> f32 {
         let dlat = (other.y - self.center.y) * METERS_PER_DEGREE_LAT;
         let dlon = (other.x - self.center.x) * self.meters_per_lon_degree;
         (dlat * dlat) + (dlon * dlon)
@@ -69,7 +70,7 @@ impl DistanceApproximator {
     /// If this method returns false, then you can be assured the point is not within the specified range.
     /// However, an affirmative result will be a false positive approximately 5% of the time on average.
     #[inline]
-    pub fn is_within_distance_of(&self, other: Coord<f64>, meters: f64) -> bool {
+    pub fn is_within_distance_of(&self, other: Coord<f32>, meters: f32) -> bool {
         let sq_dist = self.distance_squared(other);
 
         sq_dist < (meters * meters)
@@ -84,8 +85,8 @@ mod tests {
 
     proptest! {
         #[test]
-        fn haversine_oracle(lat in -90.0..90.0, lon in -180.0..180.0,
-            dlat in -0.1..0.1, dlon in -0.1..0.1) {
+        fn haversine_oracle(lat in -90.0f32..90.0, lon in -180.0f32..180.0,
+            dlat in -0.1f32..0.1, dlon in -0.1f32..0.1) {
             // Construct a test with coordinates fairly close together.
             // 0.001 degrees is about 1.1km at the equator.
             // We expect the real use cases for this to be much smaller.

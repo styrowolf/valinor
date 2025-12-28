@@ -242,7 +242,9 @@ mod test {
         // We only check a subset because it takes too long otherwise.
         let range = Uniform::try_from(0..u64::from(tile.header().directed_edge_count())).unwrap();
         for index in range.sample_iter(&mut rng).take(100) {
-            let edge_id = graph_id.with_feature_index(index).expect("Invalid graph ID.");
+            let edge_id = graph_id
+                .with_feature_index(index)
+                .expect("Invalid graph ID.");
             let opp_edge_index = tile
                 .get_opp_edge_index(edge_id)
                 .expect("Unable to get opp edge index.");

@@ -11,6 +11,7 @@ use thiserror::Error;
 use zerocopy::{FromBytes, I16, LE, U32};
 
 use enumset::EnumSet;
+use geo::{Distance, Haversine, Point, coord};
 use memmap2::MmapRaw;
 use self_cell::self_cell;
 #[cfg(test)]
@@ -37,6 +38,7 @@ mod turn_lane;
 use crate::graph_tile::predicted_speeds::{
     COEFFICIENT_COUNT, PredictedSpeedCodecError, PredictedSpeeds,
 };
+use crate::spatial::DistanceApproximator;
 pub use crate::{
     Access,
     graph_id::{GraphId, InvalidGraphIdError},
@@ -225,6 +227,9 @@ pub trait GraphTile {
     /// A raw slice of the tile's directed edges (i.e. for iteration).
     fn directed_edges(&self) -> &[DirectedEdge];
 
+    /// A raw slice of the tile's nodes (i.e. for iteration).
+    fn nodes(&self) -> &[NodeInfo];
+
     /// Administrative regions covered in this tile.
     fn admins(&self) -> &[Admin];
 
@@ -249,6 +254,83 @@ pub trait GraphTile {
     /// This function also assumes that the `x` and `y` values are within the accepted range
     /// (specifically, they must each be <= the square root of [`crate::BIN_COUNT`]).
     fn bin_index_xy(&self, x: usize, y: usize) -> usize;
+
+    /// Returns an iterator over all nodes near a specified point,
+    /// within this tile.
+    ///
+    /// No sorting or filtering of nodes is performed besides ensuring that they are close enough.
+    ///
+    /// # Performance
+    ///
+    /// This method is very fast for a few reasons:
+    ///
+    /// - It only considers nodes within a single tile (which you already have a reference to!)
+    /// - The result is an unsorted iterator
+    /// - Internally a rough approximator is used to (very!) quickly weed out unrealistic candidates
+    ///   before doing the heavier trigonometry.
+    ///
+    /// Currently, this requires a scan of all nodes in the tile.
+    /// This is a lot faster than in may sound,
+    /// but in the future, it would be interesting to explore k-d trees
+    /// for things like map matching, which need to find candidates for a large number of points.
+    ///
+    /// A k-d tree also maps directly to the most common question,
+    /// which is to retrieve the `k` nearest nodes.
+    #[inline]
+    fn nodes_within_radius(
+        &self,
+        center: Point<f32>,
+        radius_in_meters: f32,
+    ) -> impl Iterator<Item = (GraphNode<'_>, f32)> {
+        let header = self.header();
+        let level = header.graph_id().level();
+        let tile_id = header.graph_id().tile_id();
+        let sw = header.sw_corner();
+
+        // Set up an approximator based on square distance.
+        // This will always over-estimate (by about 5% for smaller distances).
+        // Since there are no false positives,
+        // we can avoid the more expensive Haversine calculations
+        // for *most* nodes.
+        let approximator = DistanceApproximator::new(center.into());
+
+        self.nodes()
+            .into_iter()
+            .enumerate()
+            .filter_map(move |(idx, node_info)| {
+                let node_id = GraphId::try_from_components(level, tile_id, idx as u64).ok()?;
+                let nc = node_info.coordinate(sw);
+
+                let nc_lon = nc.x;
+                let nc_lat = nc.y;
+
+                if !approximator
+                    .is_within_distance_of(coord! {x: nc_lon, y: nc_lat}, radius_in_meters)
+                {
+                    return None;
+                }
+
+                let npt = Point::new(nc_lon, nc_lat);
+
+                let distance_from_point = Haversine.distance(center, npt);
+                if distance_from_point <= radius_in_meters {
+                    Some((GraphNode { node_id, node_info }, distance_from_point))
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+/// A node in a graph tile.
+///
+/// Nodes represent intersections between edges in the graph.
+/// These are not directly analogous to OSM nodes; most nodes in OSM don't exist in the graph,
+/// as they are only needed for geometry, and would make traversal / path finding slow.
+pub struct GraphNode<'a> {
+    /// The Graph ID identifying this node.
+    pub node_id: GraphId,
+    pub node_info: &'a NodeInfo,
 }
 
 self_cell! {
@@ -508,6 +590,11 @@ impl GraphTile for OwnedGraphTileHandle {
     }
 
     #[inline]
+    fn nodes(&self) -> &[NodeInfo] {
+        self.borrow_dependent().nodes
+    }
+
+    #[inline]
     fn admins(&self) -> &[Admin] {
         self.borrow_dependent().admins()
     }
@@ -690,6 +777,11 @@ impl GraphTile for GraphTileView<'_> {
     #[inline]
     fn directed_edges(&self) -> &[DirectedEdge] {
         self.directed_edges
+    }
+
+    #[inline]
+    fn nodes(&self) -> &[NodeInfo] {
+        self.nodes
     }
 
     #[inline]
@@ -1435,5 +1527,29 @@ mod tests {
                 11, 12, 12
             ]
         )
+    }
+
+    #[test]
+    fn test_get_nodes_within_radius() {
+        let tile = &*TEST_GRAPH_TILE_WITH_FLOW;
+        let tile_view = tile.borrow_dependent();
+        let sw = tile_view.header().sw_corner();
+
+        for (idx, node) in tile_view.nodes().into_iter().enumerate() {
+            assert!(
+                tile_view
+                    .nodes_within_radius(node.coordinate(sw).into(), 25.0)
+                    .any(|(result_node, distance)| {
+                        result_node.node_id
+                            == tile
+                                .header()
+                                .graph_id()
+                                .with_feature_index(idx as u64)
+                                .unwrap()
+                            && distance == 0.0
+                    }),
+                "Expected to find a match for the node"
+            );
+        }
     }
 }

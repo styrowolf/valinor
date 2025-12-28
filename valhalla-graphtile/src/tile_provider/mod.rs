@@ -217,7 +217,11 @@ pub trait GraphTileProvider {
                 }
 
                 let cont = if let Some(idx) = candidate {
-                    Some(tile.header().graph_id().with_feature_index(u64::from(idx))?)
+                    Some(
+                        tile.header()
+                            .graph_id()
+                            .with_feature_index(u64::from(idx))?,
+                    )
                 } else {
                     None
                 };
