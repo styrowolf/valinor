@@ -160,7 +160,7 @@ impl EdgeInfo<'_> {
     ///
     /// This is going to be pretty fast compared to [`EdgeInfo::decode_raw_shape`],
     /// consisting of basically 2 memory accesses and 2 varint decodes.
-    pub fn decode_first_coordinate(&self) -> std::io::Result<Coord> {
+    pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(&self) -> std::io::Result<Coord<T>> {
         decode_first_coordinate(self.encoded_shape)
     }
 
