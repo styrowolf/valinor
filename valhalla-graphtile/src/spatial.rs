@@ -98,7 +98,6 @@ impl<F: CoordFloat + FromPrimitive> DistanceApproximator<F> {
 mod tests {
     use super::*;
     use geo::{Distance, coord};
-    use num_traits::Zero;
     use proptest::{prop_assert, proptest};
 
     proptest! {

@@ -7,8 +7,9 @@ use crate::tile_hierarchy::STANDARD_LEVELS;
 use crate::tile_provider::{
     GraphTileProvider, GraphTileProviderError, LockTable, OwnedGraphTileProvider,
 };
-use geo::Point;
+use geo::{CoordFloat, Point};
 use lru::LruCache;
+use num_traits::FromPrimitive;
 use std::io::{ErrorKind, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -143,7 +144,11 @@ impl GraphTileProvider for DirectoryGraphTileProvider {
         Ok(process(tile.borrow_dependent()))
     }
 
-    fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId> {
+    fn enumerate_tiles_within_radius<N: CoordFloat + FromPrimitive>(
+        &self,
+        center: Point<N>,
+        radius: N,
+    ) -> Vec<GraphId> {
         let mut out: Vec<GraphId> = Vec::new();
 
         let (north, east, south, west) = bbox_with_center(center, radius);

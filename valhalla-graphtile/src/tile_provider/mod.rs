@@ -6,7 +6,8 @@
 
 use crate::GraphId;
 use dashmap::DashMap;
-use geo::Point;
+use geo::{CoordFloat, Point};
+use num_traits::FromPrimitive;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
@@ -16,7 +17,10 @@ mod tarball;
 mod traffic;
 
 use crate::graph_id::InvalidGraphIdError;
-use crate::graph_tile::{DirectedEdge, GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo, OpposingEdgeIndex, OwnedGraphTileHandle};
+use crate::graph_tile::{
+    GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo,
+    OpposingEdgeIndex, OwnedGraphTileHandle,
+};
 pub use directory::DirectoryGraphTileProvider;
 pub use tarball::TarballTileProvider;
 pub use traffic::TrafficTileProvider;
@@ -75,7 +79,11 @@ pub trait GraphTileProvider {
     /// # Implementation note
     ///
     /// All returned tiles MUST be accessible by the provider (callers are allowed to assume this).
-    fn enumerate_tiles_within_radius(&self, center: Point, radius: f64) -> Vec<GraphId>;
+    fn enumerate_tiles_within_radius<N: CoordFloat + FromPrimitive>(
+        &self,
+        center: Point<N>,
+        radius: N,
+    ) -> Vec<GraphId>;
 
     /// Gets a tile containing the given graph ID, or else panics.
     ///

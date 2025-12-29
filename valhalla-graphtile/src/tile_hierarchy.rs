@@ -5,7 +5,8 @@
 //! See <https://valhalla.github.io/valhalla/tiles/> for a full writeup.
 
 use super::{GraphId, RoadClass};
-use geo::{Rect, coord};
+use geo::{CoordFloat, Rect, coord};
+use num_traits::FromPrimitive;
 use std::sync::LazyLock;
 
 /// A tiling system description.
@@ -84,33 +85,53 @@ impl TileLevel {
     /// This function does not sanity check the input.
     /// It is the responsibility of the caller to ensure that the coordinates are in the range for
     /// latitude and longitude, and that they describe a valid bounding box.
-    pub fn tiles_intersecting_bbox(
+    pub fn tiles_intersecting_bbox<N: CoordFloat + FromPrimitive>(
         &self,
-        north: f64,
-        east: f64,
-        south: f64,
-        west: f64,
+        north: N,
+        east: N,
+        south: N,
+        west: N,
     ) -> Vec<GraphId> {
-        let size = f64::from(self.tiling_system.tile_size);
+        // These conversions cannot fail and are exercised by unit tests
+        let size = N::from(self.tiling_system.tile_size).unwrap();
         let width = i64::from(self.tiling_system.n_cols);
         let height = i64::from(self.tiling_system.n_rows);
 
+        let n_90 = N::from(90).unwrap();
+        let n_180 = N::from(180).unwrap();
+
         if west > east {
             // Wrap across the antimeridian: [west, 180] ∪ [-180, east].
-            self.tiles_intersecting_bbox(north, 180.0, south, west)
+            self.tiles_intersecting_bbox(north, n_180, south, west)
                 .into_iter()
-                .chain(self.tiles_intersecting_bbox(north, east, south, -180.0))
+                .chain(self.tiles_intersecting_bbox(north, east, south, -n_180))
                 .collect()
         } else {
             // At this point we have a non-wrapping lon interval [w, e] with w <= e.
 
             // Map lon from [-180, 180] to [0, 360] and then to tile index.
-            let min_x = (((west + 180.0) / size).floor() as i64).clamp(0, width - 1);
-            let max_x = (((east + 180.0) / size).floor() as i64).clamp(0, width - 1);
+            let min_x = (((west + n_180) / size)
+                .floor()
+                .to_i64()
+                .expect("Unable to convert value to i64"))
+            .clamp(0, width - 1);
+            let max_x = (((east + n_180) / size)
+                .floor()
+                .to_i64()
+                .expect("Unable to convert value to i64"))
+            .clamp(0, width - 1);
 
             // Map lat from [-90, 90] to [0, 180] and then to tile index.
-            let min_y = (((south + 90.0) / size).floor() as i64).clamp(0, height - 1);
-            let max_y = (((north + 90.0) / size).floor() as i64).clamp(0, height - 1);
+            let min_y = (((south + n_90) / size)
+                .floor()
+                .to_i64()
+                .expect("Unable to convert value to i64"))
+            .clamp(0, height - 1);
+            let max_y = (((north + n_90) / size)
+                .floor()
+                .to_i64()
+                .expect("Unable to convert value to i64"))
+            .clamp(0, height - 1);
 
             // Iterate row-major: for each y, for each x, compute tile_index.
             (min_y..=max_y)
