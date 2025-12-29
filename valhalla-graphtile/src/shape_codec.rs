@@ -6,7 +6,7 @@
 //! See Google's [protobuf docs](https://protobuf.dev/programming-guides/encoding/)
 //! for info on varint encoding generally.
 
-use geo::{Coord, coord, CoordFloat};
+use geo::{Coord, CoordFloat, coord};
 use integer_encoding::VarIntReader;
 use num_traits::FromPrimitive;
 
@@ -47,7 +47,9 @@ pub fn decode_shape<T: CoordFloat + FromPrimitive>(bytes: &[u8]) -> std::io::Res
 /// # Errors
 ///
 /// Decoding may fail if the byte buffer is incorrectly sized or corrupt.
-pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(bytes: &[u8]) -> std::io::Result<Coord<T>> {
+pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(
+    bytes: &[u8],
+) -> std::io::Result<Coord<T>> {
     let mut bytes = bytes;
 
     let prec = T::from(DECODE_PRECISION).expect("Conversion from i32 to float should not fail");

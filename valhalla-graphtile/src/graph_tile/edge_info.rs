@@ -4,8 +4,8 @@ use crate::{
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
 use geo::{Coord, CoordFloat};
-use std::borrow::Cow;
 use num_traits::FromPrimitive;
+use std::borrow::Cow;
 use zerocopy::{FromBytes, LE, U16, U32};
 use zerocopy_derive::{FromBytes, Immutable, KnownLayout, Unaligned};
 
@@ -140,7 +140,9 @@ impl EdgeInfo<'_> {
     ///
     /// This requires decoding the shape from its packed representation (varint).
     /// If expect to reuse geometries many times, you may want to cache the decoded geometries.
-    pub fn decode_raw_shape<T: CoordFloat + FromPrimitive>(&self) -> std::io::Result<Vec<Coord<T>>> {
+    pub fn decode_raw_shape<T: CoordFloat + FromPrimitive>(
+        &self,
+    ) -> std::io::Result<Vec<Coord<T>>> {
         decode_shape(self.encoded_shape)
     }
 
@@ -160,7 +162,9 @@ impl EdgeInfo<'_> {
     ///
     /// This is going to be pretty fast compared to [`EdgeInfo::decode_raw_shape`],
     /// consisting of basically 2 memory accesses and 2 varint decodes.
-    pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(&self) -> std::io::Result<Coord<T>> {
+    pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(
+        &self,
+    ) -> std::io::Result<Coord<T>> {
         decode_first_coordinate(self.encoded_shape)
     }
 

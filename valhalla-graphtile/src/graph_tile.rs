@@ -11,8 +11,9 @@ use thiserror::Error;
 use zerocopy::{FromBytes, I16, LE, U32};
 
 use enumset::EnumSet;
-use geo::{Distance, Haversine, Point, coord};
+use geo::{CoordFloat, Point, coord};
 use memmap2::MmapRaw;
+use num_traits::FromPrimitive;
 use self_cell::self_cell;
 #[cfg(test)]
 use std::sync::LazyLock;
@@ -256,9 +257,11 @@ pub trait GraphTile {
     fn bin_index_xy(&self, x: usize, y: usize) -> usize;
 
     /// Returns an iterator over all nodes near a specified point,
-    /// within this tile.
+    /// within this tile, including the approximate distance from the point.
     ///
     /// No sorting or filtering of nodes is performed besides ensuring that they are close enough.
+    /// The distance returned (second tuple element) is approximate,
+    /// but should be accurate to within 1 meter for radii of up to 20km.
     ///
     /// # Performance
     ///
@@ -266,7 +269,7 @@ pub trait GraphTile {
     ///
     /// - It only considers nodes within a single tile (which you already have a reference to!)
     /// - The result is an unsorted iterator
-    /// - Internally a rough approximator is used to (very!) quickly weed out unrealistic candidates
+    /// - Internally, an approximator is used to (very!) quickly weed out unrealistic candidates
     ///   before doing the heavier trigonometry.
     ///
     /// Currently, this requires a scan of all nodes in the tile.
@@ -276,12 +279,19 @@ pub trait GraphTile {
     ///
     /// A k-d tree also maps directly to the most common question,
     /// which is to retrieve the `k` nearest nodes.
+    ///
+    /// # Panics
+    ///
+    /// This isn't intended to be used to get nodes over large distances.
+    /// In debug builds, this will panic if `radius_in_meters` is larger than 20,000 (20km).
+    ///
+    /// Also panics if you provide non-finite floating point values (e.g., NaN or infinity).
     #[inline]
-    fn nodes_within_radius(
+    fn nodes_within_radius<F: CoordFloat + FromPrimitive>(
         &self,
-        center: Point<f32>,
-        radius_in_meters: f32,
-    ) -> impl Iterator<Item = (GraphNode<'_>, f32)> {
+        center: Point<F>,
+        radius_in_meters: F,
+    ) -> impl Iterator<Item = (GraphNode<'_>, F)> {
         let header = self.header();
         let level = header.graph_id().level();
         let tile_id = header.graph_id().tile_id();
@@ -293,6 +303,7 @@ pub trait GraphTile {
         // we can avoid the more expensive Haversine calculations
         // for *most* nodes.
         let approximator = DistanceApproximator::new(center.into());
+        let radius_squared = radius_in_meters * radius_in_meters;
 
         self.nodes()
             .into_iter()
@@ -301,20 +312,11 @@ pub trait GraphTile {
                 let node_id = GraphId::try_from_components(level, tile_id, idx as u64).ok()?;
                 let nc = node_info.coordinate(sw);
 
-                let nc_lon = nc.x;
-                let nc_lat = nc.y;
-
-                if !approximator
-                    .is_probably_within_distance_of(coord! {x: nc_lon, y: nc_lat}, radius_in_meters)
-                {
-                    return None;
-                }
-
-                let npt = Point::new(nc_lon, nc_lat);
-
-                let distance_from_point = Haversine.distance(center, npt);
-                if distance_from_point <= radius_in_meters {
-                    Some((GraphNode { node_id, node_info }, distance_from_point))
+                let nc_lon = F::from(nc.x).expect("Unable to convert floating point");
+                let nc_lat = F::from(nc.y).expect("Unable to convert floating point");
+                let sq_dist = approximator.distance_squared(coord! {x: nc_lon, y: nc_lat});
+                if sq_dist <= radius_squared {
+                    Some((GraphNode { node_id, node_info }, sq_dist.sqrt()))
                 } else {
                     None
                 }

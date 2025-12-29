@@ -18,8 +18,8 @@ mod traffic;
 
 use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::{
-    GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo,
-    OpposingEdgeIndex, OwnedGraphTileHandle,
+    GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo, OpposingEdgeIndex,
+    OwnedGraphTileHandle,
 };
 pub use directory::DirectoryGraphTileProvider;
 pub use tarball::TarballTileProvider;

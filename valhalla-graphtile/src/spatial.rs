@@ -80,6 +80,11 @@ impl<F: CoordFloat + FromPrimitive> DistanceApproximator<F> {
     /// Returns whether the other coordinate is *probably* within `meters` of the reference coordinate.
     ///
     /// See the [`DistanceApproximator`] docs for more details on the limitations.
+    ///
+    /// # Panics
+    ///
+    /// In debug mode, this will panic if `meters` is greater than 20,000 (20km).
+    /// You really shouldn't be using this for large distances.
     #[inline]
     pub fn is_probably_within_distance_of(&self, other: Coord<F>, meters: F) -> bool {
         debug_assert!(
