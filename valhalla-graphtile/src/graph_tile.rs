@@ -1298,7 +1298,11 @@ mod tests {
             insta::assert_debug_snapshot!("first_edge_info", first_edge_info);
             insta::assert_debug_snapshot!(
                 "first_edge_info_decoded_shape",
-                first_edge_info.decode_raw_shape()
+                first_edge_info.decode_raw_shape::<f64>()
+            );
+            insta::assert_debug_snapshot!(
+                "first_edge_info_decoded_shape_f32",
+                first_edge_info.decode_raw_shape::<f32>()
             );
             insta::assert_debug_snapshot!("first_edge_info_names", first_edge_info.get_names());
         }

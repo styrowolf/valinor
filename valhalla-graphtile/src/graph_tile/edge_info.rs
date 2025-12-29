@@ -3,8 +3,9 @@ use crate::{
 };
 use bitfield_struct::bitfield;
 use enumset::EnumSet;
-use geo::Coord;
+use geo::{Coord, CoordFloat};
 use std::borrow::Cow;
+use num_traits::FromPrimitive;
 use zerocopy::{FromBytes, LE, U16, U32};
 use zerocopy_derive::{FromBytes, Immutable, KnownLayout, Unaligned};
 
@@ -139,7 +140,7 @@ impl EdgeInfo<'_> {
     ///
     /// This requires decoding the shape from its packed representation (varint).
     /// If expect to reuse geometries many times, you may want to cache the decoded geometries.
-    pub fn decode_raw_shape(&self) -> std::io::Result<Vec<Coord>> {
+    pub fn decode_raw_shape<T: CoordFloat + FromPrimitive>(&self) -> std::io::Result<Vec<Coord<T>>> {
         decode_shape(self.encoded_shape)
     }
 

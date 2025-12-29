@@ -6,8 +6,9 @@
 //! See Google's [protobuf docs](https://protobuf.dev/programming-guides/encoding/)
 //! for info on varint encoding generally.
 
-use geo::{Coord, coord};
+use geo::{Coord, coord, CoordFloat};
 use integer_encoding::VarIntReader;
+use num_traits::FromPrimitive;
 
 const DECODE_PRECISION: f64 = 1e-6;
 
@@ -18,10 +19,14 @@ const DECODE_PRECISION: f64 = 1e-6;
 /// Decoding may fail if the byte buffer is not exactly sized
 /// (you cannot include extra information at the end of a slice).
 /// It will also fail if the varint data is malformed.
-pub fn decode_shape(bytes: &[u8]) -> std::io::Result<Vec<Coord>> {
+pub fn decode_shape<T: CoordFloat + FromPrimitive>(bytes: &[u8]) -> std::io::Result<Vec<Coord<T>>> {
     // Pre-allocating 1/4 the byte len is an optimization from Valhalla.
     // This sounds about right since we can expect most values to be small due to delta encoding.
-    let mut coords: Vec<Coord> = Vec::with_capacity(bytes.len() / 4);
+    let mut coords: Vec<Coord<T>> = Vec::with_capacity(bytes.len() / 4);
+
+    // Can't fail
+    let prec = T::from(DECODE_PRECISION).expect("Conversion from i32 to float should not fail");
+
     let mut lat = 0;
     let mut lon = 0;
     let mut bytes = bytes;
@@ -29,8 +34,8 @@ pub fn decode_shape(bytes: &[u8]) -> std::io::Result<Vec<Coord>> {
         lat += bytes.read_varint::<i32>()?;
         lon += bytes.read_varint::<i32>()?;
         coords.push(coord! {
-            x: f64::from(lon) * DECODE_PRECISION,
-            y: f64::from(lat) * DECODE_PRECISION,
+            x: T::from(lon).expect("Conversion from i32 to float should not fail") * prec,
+            y: T::from(lat).expect("Conversion from i32 to float should not fail") * prec,
         });
     }
 
@@ -42,13 +47,16 @@ pub fn decode_shape(bytes: &[u8]) -> std::io::Result<Vec<Coord>> {
 /// # Errors
 ///
 /// Decoding may fail if the byte buffer is incorrectly sized or corrupt.
-pub fn decode_first_coordinate(bytes: &[u8]) -> std::io::Result<Coord> {
+pub fn decode_first_coordinate<T: CoordFloat + FromPrimitive>(bytes: &[u8]) -> std::io::Result<Coord<T>> {
     let mut bytes = bytes;
+
+    let prec = T::from(DECODE_PRECISION).expect("Conversion from i32 to float should not fail");
+
     let lat = bytes.read_varint::<i32>()?;
     let lon = bytes.read_varint::<i32>()?;
 
     Ok(coord! {
-        x: f64::from(lon) * DECODE_PRECISION,
-        y: f64::from(lat) * DECODE_PRECISION,
+        x: T::from(lon).expect("Conversion from i32 to float should not fail") * prec,
+        y: T::from(lat).expect("Conversion from i32 to float should not fail") * prec,
     })
 }

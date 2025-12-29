@@ -350,8 +350,8 @@ mod test {
                     let shortcut_edge = tile
                         .get_directed_edge(shortcut_id)
                         .unwrap();
-                    let edge_geom = tile.get_edge_info(edge).unwrap().decode_raw_shape().unwrap();
-                    let mut shortcut_edge_geom = tile.get_edge_info(shortcut_edge).unwrap().decode_raw_shape().unwrap();
+                    let edge_geom = tile.get_edge_info(edge).unwrap().decode_raw_shape::<f32>().unwrap();
+                    let mut shortcut_edge_geom = tile.get_edge_info(shortcut_edge).unwrap().decode_raw_shape::<f32>().unwrap();
 
                     if edge.edge_info_is_forward() != shortcut_edge.edge_info_is_forward() {
                         shortcut_edge_geom.reverse();
