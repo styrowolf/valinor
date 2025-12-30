@@ -8,6 +8,7 @@ use crate::GraphId;
 use dashmap::DashMap;
 use geo::{CoordFloat, Point};
 use num_traits::FromPrimitive;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
@@ -18,8 +19,8 @@ mod traffic;
 
 use crate::graph_id::InvalidGraphIdError;
 use crate::graph_tile::{
-    GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo, OpposingEdgeIndex,
-    OwnedGraphTileHandle,
+    GraphNode, GraphTile, GraphTileDecodingError, GraphTileView, LookupError, NodeInfo,
+    OpposingEdgeIndex, OwnedGraphTileHandle,
 };
 pub use directory::DirectoryGraphTileProvider;
 pub use tarball::TarballTileProvider;
@@ -363,6 +364,50 @@ pub trait GraphTileProvider {
             }
         })?
     }
+
+    /// Creates an iterator over all nodes within a given radius of a point.
+    ///
+    /// No sorting or filtering of nodes is performed besides ensuring that they are close enough.
+    /// The distance returned (second tuple element) is approximate,
+    /// but should be accurate to within 1 meter for radii of up to 20km.
+    ///
+    /// # Performance
+    ///
+    /// This method is designed to give results with as little overhead as possible:
+    ///
+    /// - It only buffers results internally for one tile at a time.
+    /// - The iteration order is not guaranteed to follow any particular sorting.
+    /// - Internally, an approximator is used to (very!) quickly weed out unrealistic candidates
+    ///   before doing the heavier trigonometry.
+    ///
+    /// # Panics
+    ///
+    /// This isn't intended to be used to get nodes over large distances.
+    /// In debug builds, this will panic if `radius_in_meters` is larger than 20,000 (20km).
+    ///
+    /// Also panics if you provide non-finite floating point values (e.g., NaN or infinity).
+    #[inline]
+    fn nodes_within_radius<N: CoordFloat + FromPrimitive, F, T>(
+        &self,
+        center: Point<N>,
+        radius_in_meters: N,
+        op: F,
+    ) -> impl Iterator<Item = Result<T, GraphTileProviderError>>
+    where
+        F: FnMut(GraphNode<'_>, N) -> T,
+        Self: Sized,
+    {
+        NodesWithinRadius {
+            provider: self,
+            center,
+            radius_in_meters,
+            op,
+            tiles: self
+                .enumerate_tiles_within_radius(center, radius_in_meters)
+                .into_iter(),
+            buffer: VecDeque::new(),
+        }
+    }
 }
 
 pub trait OwnedGraphTileProvider: GraphTileProvider {
@@ -400,9 +445,63 @@ impl<K: std::hash::Hash + Eq + Clone> LockTable<K> {
     }
 }
 
+/// An iterator over nodes within a given radius.
+///
+/// Used internally and returned as an opaque `impl Iterator`.
+struct NodesWithinRadius<'prov, P, N, F, T, I>
+where
+    P: GraphTileProvider,
+    N: CoordFloat + FromPrimitive,
+    F: for<'t> FnMut(GraphNode<'t>, N) -> T,
+    I: Iterator<Item = GraphId>,
+{
+    provider: &'prov P,
+    center: Point<N>,
+    radius_in_meters: N,
+    op: F,
+    tiles: I,
+    buffer: VecDeque<T>,
+}
+
+impl<'prov, P, N, F, T, I> Iterator for NodesWithinRadius<'prov, P, N, F, T, I>
+where
+    P: GraphTileProvider,
+    N: CoordFloat + FromPrimitive,
+    F: for<'t> FnMut(GraphNode<'t>, N) -> T,
+    I: Iterator<Item = GraphId>,
+{
+    type Item = Result<T, GraphTileProviderError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Try to get an item from the buffer
+        if let Some(next) = self.buffer.pop_front() {
+            return Some(Ok(next));
+        }
+
+        // Fill the buffer if needed
+        let base_id = self.tiles.next()?;
+        if let Err(err) = self.provider.with_tile_containing(base_id, |tile| {
+            self.buffer.extend(
+                tile.nodes_within_radius(self.center, self.radius_in_meters)
+                    .map(|(gn, approx_dist)| (self.op)(gn, approx_dist)),
+            );
+        }) {
+            return Some(Err(err));
+        }
+
+        // After filling from the tile, either return the first item or keep iterating
+        self.buffer.pop_front().map(Ok).or_else(|| self.next())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::GraphId;
+    use crate::graph_tile::GraphTile;
+    use crate::tile_provider::{DirectoryGraphTileProvider, GraphTileProvider};
     use geo::{Destination, Haversine, point};
+    use std::num::NonZeroUsize;
+    use std::path::PathBuf;
 
     #[test]
     fn haversine_antimeridian_wraps() {
@@ -415,5 +514,45 @@ mod tests {
         let projected = Haversine.destination(point!(x: -179.9, y: 0.0), 270.0, 50_000.0);
         assert!(projected.x() > 179.0);
         assert!(projected.x() < 180.0);
+    }
+
+    #[test]
+    fn test_nodes_within_radius() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("andorra-tiles");
+        let provider = DirectoryGraphTileProvider::new(base, NonZeroUsize::new(4).unwrap());
+        let graph_id = GraphId::try_from_components(0, 3015, 0).expect("Unable to create graph ID");
+        provider.with_tile_containing_or_panic(graph_id, |tile_view| {
+            let sw = tile_view.header().sw_corner();
+
+            for (idx, node) in tile_view.nodes().into_iter().enumerate() {
+                assert!(
+                    provider
+                        .nodes_within_radius(
+                            node.coordinate(sw).into(),
+                            25.0,
+                            |graph_node, distance| { (graph_node.node_id, distance) }
+                        )
+                        .any(|res| {
+                            match res {
+                                Ok((node_id, distance)) => {
+                                    node_id
+                                        == tile_view
+                                            .header()
+                                            .graph_id()
+                                            .with_feature_index(idx as u64)
+                                            .unwrap()
+                                        && distance == 0.0
+                                }
+                                Err(e) => {
+                                    panic!("Error searching for nodes: {:?}", e);
+                                }
+                            }
+                        }),
+                    "Expected to find a match for the node"
+                );
+            }
+        })
     }
 }
